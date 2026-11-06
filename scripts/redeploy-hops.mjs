@@ -9,10 +9,14 @@
  *   hop4_RAILWAY_API_TOKEN=...
  *
  * Create account tokens at https://railway.com/account/tokens (one per hop account).
+ *
+ * Note: Railway CLI rejects account tokens via RAILWAY_TOKEN env, but accepts them
+ * when written into ~/.railway/config.json as the user session token.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, copyFileSync, existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -52,11 +56,48 @@ const allowed = registry.nodes
 const exitAllow =
   '{"11155111":"https://ethereum-sepolia-rpc.publicnode.com"}';
 
-function sh(token, args, opts = {}) {
-  const env = { ...process.env, RAILWAY_TOKEN: token, RAILWAY_API_TOKEN: token };
+const railwayConfigPath = path.join(os.homedir(), ".railway", "config.json");
+const railwayConfigBackup = path.join(
+  os.homedir(),
+  ".railway",
+  "config.json.bak-relay-redeploy",
+);
+
+function loadRailwayConfig() {
+  if (!existsSync(railwayConfigPath)) {
+    return { projects: {}, user: {} };
+  }
+  return JSON.parse(readFileSync(railwayConfigPath, "utf8"));
+}
+
+function setSessionToken(token) {
+  const cfg = loadRailwayConfig();
+  if (!existsSync(railwayConfigBackup) && existsSync(railwayConfigPath)) {
+    copyFileSync(railwayConfigPath, railwayConfigBackup);
+  }
+  cfg.user = {
+    ...(cfg.user ?? {}),
+    token,
+    accessToken: token,
+    refreshToken: null,
+    tokenExpiresAt: null,
+  };
+  writeFileSync(railwayConfigPath, JSON.stringify(cfg, null, 2));
+}
+
+function restoreSession() {
+  if (existsSync(railwayConfigBackup)) {
+    copyFileSync(railwayConfigBackup, railwayConfigPath);
+  }
+}
+
+function sh(args, opts = {}) {
+  const env = { ...process.env };
+  delete env.RAILWAY_TOKEN;
+  delete env.RAILWAY_API_TOKEN;
   console.log(`$ railway ${args.join(" ")}`);
   const res = spawnSync("railway", args, {
-    cwd: root,
+    cwd: opts.cwd ?? root,
     encoding: "utf8",
     env,
     ...opts,
@@ -69,75 +110,96 @@ function sh(token, args, opts = {}) {
   return res;
 }
 
-// Auth check
-{
+try {
   const t = tokens.hop1_RAILWAY_API_TOKEN;
   if (!t) {
     console.error("Missing hop1_RAILWAY_API_TOKEN in .keys/railway-tokens.env");
     process.exit(1);
   }
-  const who = sh(t, ["whoami"], { allowFail: true });
+  setSessionToken(t);
+  const who = sh(["whoami"], { allowFail: true });
   if (who.status !== 0) {
     console.error(
       "\nRailway tokens look invalid/expired. Create new account tokens and put them in .keys/railway-tokens.env, then re-run:\n  node scripts/redeploy-hops.mjs\n",
     );
     process.exit(1);
   }
-}
 
-for (const hop of hops) {
-  const token = tokens[`${hop.id}_RAILWAY_API_TOKEN`];
-  const meta = JSON.parse(
-    readFileSync(path.join(root, `.keys/railway-meta/${hop.id}.json`), "utf8"),
-  );
-  const priv = secrets[`${hop.id}_RELAY_PRIVATE_KEY`];
-  const pub = secrets[`${hop.id}_RELAY_PUBLIC_KEY`];
-  if (!token || !priv || !pub) throw new Error(`Missing creds for ${hop.id}`);
+  for (const hop of hops) {
+    const token = tokens[`${hop.id}_RAILWAY_API_TOKEN`];
+    const meta = JSON.parse(
+      readFileSync(path.join(root, `.keys/railway-meta/${hop.id}.json`), "utf8"),
+    );
+    const priv = secrets[`${hop.id}_RELAY_PRIVATE_KEY`];
+    const pub = secrets[`${hop.id}_RELAY_PUBLIC_KEY`];
+    if (!token || !priv || !pub) throw new Error(`Missing creds for ${hop.id}`);
 
-  console.log(`\n======== ${hop.id} ========`);
-  sh(token, [
-    "link",
-    "--project",
-    meta.projectId,
-    "--service",
-    meta.serviceId || hop.id,
-  ]);
+    console.log(`\n======== ${hop.id} ========`);
+    setSessionToken(token);
+    sh([
+      "link",
+      "--project",
+      meta.projectId,
+      "--service",
+      meta.serviceId || hop.id,
+      "--environment",
+      "production",
+    ]);
 
-  const pairs = [
-    `ROLE=${hop.role}`,
-    `RELAY_PRIVATE_KEY=${priv}`,
-    `RELAY_PUBLIC_KEY=${pub}`,
-    `ALLOWED_HOP_URLS=${allowed}`,
-    `EXIT_RPC_ALLOWLIST=${exitAllow}`,
-    "DEMO_LOGGING=true",
-    "MIX_DELAY_MS_MIN=40",
-    "MIX_DELAY_MS_MAX=180",
-    "UPSTREAM_TIMEOUT_MS=10000",
-    "RATE_LIMIT_PER_MINUTE=60",
-    "CIRCUIT_REGISTRY_URL=https://raw.githubusercontent.com/KartikDehru/Relay-mesh/main/circuit-registry.json",
-  ];
-  sh(token, ["variable", "set", ...pairs]);
-  sh(token, ["variable", "delete", "EXIT_RPC_URL"], { allowFail: true });
-  sh(token, ["up", "-d", "-y", "-c"]);
-  console.log(`✓ ${hop.id} redeploy kicked`);
-}
+    const commitSha = spawnSync("git", ["rev-parse", "HEAD"], {
+      cwd: root,
+      encoding: "utf8",
+    }).stdout.trim() || "unknown";
 
-console.log("\nWaiting for health…");
-for (const hop of hops) {
-  const url = registry.nodes.find((n) => n.id === hop.id)?.url;
-  let ok = false;
-  for (let i = 0; i < 45; i++) {
-    try {
-      const res = await fetch(`${url}/health`);
-      if (res.ok) {
-        console.log(hop.id, "ok", (await res.json()).fingerprint);
-        ok = true;
-        break;
-      }
-    } catch {
-      /* retry */
-    }
-    await new Promise((r) => setTimeout(r, 4000));
+    const pairs = [
+      `ROLE=${hop.role}`,
+      `RELAY_PRIVATE_KEY=${priv}`,
+      `RELAY_PUBLIC_KEY=${pub}`,
+      `ALLOWED_HOP_URLS=${allowed}`,
+      `EXIT_RPC_ALLOWLIST=${exitAllow}`,
+      "DEMO_LOGGING=true",
+      "MIX_DELAY_MS_MIN=40",
+      "MIX_DELAY_MS_MAX=180",
+      "UPSTREAM_TIMEOUT_MS=10000",
+      "RATE_LIMIT_PER_MINUTE=60",
+      "CIRCUIT_REGISTRY_URL=https://raw.githubusercontent.com/KartikDehru/Relay-mesh/main/circuit-registry.json",
+      `RAILWAY_GIT_COMMIT_SHA=${commitSha}`,
+    ];
+    sh(["variable", "set", ...pairs]);
+    sh(["variable", "delete", "EXIT_RPC_URL"], { allowFail: true });
+    // Deploy from repo root so monorepo railway.toml / Dockerfile resolve.
+    sh(["up", "-d", "-y", "-c"]);
+    console.log(`✓ ${hop.id} redeploy kicked`);
   }
-  if (!ok) console.error(hop.id, "FAILED health wait");
+
+  console.log("\nWaiting for health…");
+  for (const hop of hops) {
+    const url = registry.nodes.find((n) => n.id === hop.id)?.url;
+    let ok = false;
+    for (let i = 0; i < 45; i++) {
+      try {
+        const res = await fetch(`${url}/health`);
+        if (res.ok) {
+          const body = await res.json();
+          console.log(
+            hop.id,
+            "ok",
+            body.fingerprint,
+            "commit",
+            body.commit ?? "?",
+            "version",
+            body.version ?? "?",
+          );
+          ok = true;
+          break;
+        }
+      } catch {
+        /* retry */
+      }
+      await new Promise((r) => setTimeout(r, 4000));
+    }
+    if (!ok) console.error(hop.id, "FAILED health wait");
+  }
+} finally {
+  restoreSession();
 }
