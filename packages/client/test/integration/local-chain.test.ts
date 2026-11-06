@@ -138,4 +138,44 @@ describe("local 3-hop chain", () => {
     expect(blockNum).toBeGreaterThan(0);
     console.log(`eth_blockNumber via mesh => ${result.result} (${blockNum})`);
   });
+
+  it("entry/middle wire body is sealed ciphertext, not JSON-RPC plaintext", async () => {
+    const { buildOnion } = await import("@relay-mesh/crypto");
+    const circuit = [
+      {
+        url: `http://127.0.0.1:${hops[0]!.port}`,
+        publicKey: hops[0]!.keypair.publicKey,
+      },
+      {
+        url: `http://127.0.0.1:${hops[1]!.port}`,
+        publicKey: hops[1]!.keypair.publicKey,
+      },
+      {
+        url: `http://127.0.0.1:${hops[2]!.port}`,
+        publicKey: hops[2]!.keypair.publicKey,
+      },
+    ] as const;
+
+    const { onion } = buildOnion(
+      { jsonrpc: "2.0", id: 2, method: "eth_blockNumber", params: [] },
+      [...circuit],
+      EXIT_RPC_URL,
+    );
+
+    const res = await fetch(`http://127.0.0.1:${hops[0]!.port}/relay`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ payload: onion }),
+    });
+    expect(res.status).toBe(200);
+    const wire = (await res.json()) as {
+      payload?: string;
+      jsonrpc?: string;
+      result?: string;
+    };
+    expect(wire.jsonrpc).toBeUndefined();
+    expect(wire.result).toBeUndefined();
+    expect(typeof wire.payload).toBe("string");
+    expect(wire.payload!.length).toBeGreaterThan(32);
+  });
 });

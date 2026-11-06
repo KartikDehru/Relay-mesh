@@ -8,6 +8,7 @@ import {
   openLayer,
   publicKeyFingerprint,
   publicKeyFromPrivate,
+  sealReply,
 } from "@relay-mesh/crypto";
 import type { RelayConfig } from "./config.js";
 
@@ -19,6 +20,7 @@ type ForwardLayer = {
 type ExitLayer = {
   rpcTargetUrl: string;
   rpcPayload: unknown;
+  replyKey: string;
 };
 
 function sleep(ms: number): Promise<void> {
@@ -59,7 +61,11 @@ function logRequest(
 function isExitLayer(layer: unknown): layer is ExitLayer {
   if (!layer || typeof layer !== "object") return false;
   const o = layer as Record<string, unknown>;
-  return "rpcPayload" in o && !("innerBlob" in o);
+  return (
+    "rpcPayload" in o &&
+    typeof o.replyKey === "string" &&
+    !("innerBlob" in o)
+  );
 }
 
 function isForwardLayer(layer: unknown): layer is ForwardLayer {
@@ -187,20 +193,31 @@ async function handleExit(
     );
   }
 
+  if (typeof layer.replyKey !== "string" || layer.replyKey.length === 0) {
+    res.status(400).json({ error: "Exit layer missing replyKey" });
+    return;
+  }
+
   const upstream = await fetch(targetUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(layer.rpcPayload),
   });
   const text = await upstream.text();
-  const bytesOut = byteLength(text);
+  const ct = upstream.headers.get("content-type") ?? undefined;
 
-  logRequest(cfg.role, bytesIn, bytesOut, started, upstream.status);
+  // Always HTTP 200 to clients; status/content-type live inside the sealed reply
+  // so entry/middle only observe ciphertext.
+  const sealed = sealReply(layer.replyKey, {
+    status: upstream.status,
+    contentType: ct,
+    body: text,
+  });
+  const body = JSON.stringify({ payload: sealed });
+  const bytesOut = byteLength(body);
 
-  res.status(upstream.status);
-  const ct = upstream.headers.get("content-type");
-  if (ct) res.setHeader("content-type", ct);
-  res.send(text);
+  logRequest(cfg.role, bytesIn, bytesOut, started, 200);
+  res.status(200).type("json").send(body);
 }
 
 async function handleForward(
@@ -223,6 +240,7 @@ async function handleForward(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ payload: layer.innerBlob }),
   });
+  // Pass the sealed reply envelope through unchanged (ciphertext only).
   const text = await upstream.text();
   const bytesOut = byteLength(text);
 

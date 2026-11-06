@@ -1,4 +1,4 @@
-import { buildOnion, type RelayHop } from "@relay-mesh/crypto";
+import { buildOnion, openReply, type RelayHop } from "@relay-mesh/crypto";
 import type { CircuitRegistry, RegistryNode, RpcPayload } from "./types";
 
 export async function loadRegistry(): Promise<CircuitRegistry> {
@@ -106,7 +106,7 @@ export async function sendViaMeshBrowser(
   hops: [RelayHop, RelayHop, RelayHop],
   rpcTargetUrl: string,
 ): Promise<{ result: unknown; ms: number; onion: string }> {
-  const onion = buildOnion(rpcPayload, hops, rpcTargetUrl);
+  const { onion, replyKey } = buildOnion(rpcPayload, hops, rpcTargetUrl);
   const entryUrl = hops[0].url.replace(/\/$/, "") + "/relay";
   const t0 = performance.now();
   const res = await fetch(entryUrl, {
@@ -117,9 +117,24 @@ export async function sendViaMeshBrowser(
   const text = await res.text();
   const ms = Math.round(performance.now() - t0);
   if (!res.ok) throw new Error(`Mesh HTTP ${res.status}: ${text.slice(0, 240)}`);
-  let result: unknown = text;
+  let wire: { payload?: string };
   try {
-    result = JSON.parse(text);
+    wire = JSON.parse(text) as { payload?: string };
+  } catch {
+    throw new Error("Mesh returned non-JSON body");
+  }
+  if (typeof wire.payload !== "string") {
+    throw new Error("Mesh response missing sealed payload");
+  }
+  const envelope = openReply(replyKey, wire.payload);
+  if (envelope.status < 200 || envelope.status >= 300) {
+    throw new Error(
+      `Upstream RPC HTTP ${envelope.status}: ${envelope.body.slice(0, 200)}`,
+    );
+  }
+  let result: unknown = envelope.body;
+  try {
+    result = JSON.parse(envelope.body);
   } catch {
     /* keep text */
   }

@@ -3,7 +3,7 @@
 // returns the upstream RPC response. Ambient `fetch` reaches Railway entry hops
 // (CORS enabled). Crypto is bundled via @relay-mesh/crypto.
 
-import { buildOnion, type RelayHop } from "@relay-mesh/crypto";
+import { buildOnion, openReply, type RelayHop } from "@relay-mesh/crypto";
 import type {
   AnonRpcWorkerApi,
   AnonFetchResponse,
@@ -82,7 +82,7 @@ async function handleFetch(
     }
   }
 
-  const onion = buildOnion(
+  const { onion, replyKey } = buildOnion(
     rpcPayload,
     hops.map((h) => ({ url: h.url, publicKey: h.publicKey })) as [
       RelayHop,
@@ -99,13 +99,46 @@ async function handleFetch(
     body: JSON.stringify({ payload: onion }),
   });
 
+  const wireText = await resp.text();
+  if (!resp.ok) {
+    return {
+      status: resp.status,
+      headers: [["content-type", "application/json"]],
+      body: new TextEncoder().encode(wireText),
+      url: resp.url,
+    };
+  }
+
+  let wire: { payload?: string };
+  try {
+    wire = JSON.parse(wireText) as { payload?: string };
+  } catch {
+    return {
+      status: 502,
+      headers: [["content-type", "text/plain"]],
+      body: new TextEncoder().encode("relay mesh returned non-JSON"),
+      url: entryUrl,
+    };
+  }
+  if (typeof wire.payload !== "string") {
+    return {
+      status: 502,
+      headers: [["content-type", "text/plain"]],
+      body: new TextEncoder().encode("relay mesh missing sealed payload"),
+      url: entryUrl,
+    };
+  }
+
+  const envelope = openReply(replyKey, wire.payload);
   const headers: HeaderList = [];
-  resp.headers.forEach((v, k) => headers.push([k, v]));
+  if (envelope.contentType) {
+    headers.push(["content-type", envelope.contentType]);
+  }
   return {
-    status: resp.status,
+    status: envelope.status,
     headers,
-    body: new Uint8Array(await resp.arrayBuffer()),
-    url: resp.url,
+    body: new TextEncoder().encode(envelope.body),
+    url,
   };
 }
 

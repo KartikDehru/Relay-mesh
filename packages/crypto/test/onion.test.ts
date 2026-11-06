@@ -4,6 +4,9 @@ import {
   sealLayer,
   openLayer,
   buildOnion,
+  sealReply,
+  openReply,
+  generateReplyKey,
 } from "../src/index.js";
 
 describe("sealLayer / openLayer", () => {
@@ -25,6 +28,34 @@ describe("sealLayer / openLayer", () => {
   });
 });
 
+describe("sealReply / openReply", () => {
+  it("round-trips a reply envelope", () => {
+    const replyKey = generateReplyKey();
+    const envelope = {
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        result: "0xabc",
+      }),
+    };
+    const payload = sealReply(replyKey, envelope);
+    const opened = openReply(replyKey, payload);
+    expect(opened).toEqual(envelope);
+  });
+
+  it("fails with the wrong reply key", () => {
+    const a = generateReplyKey();
+    const b = generateReplyKey();
+    const payload = sealReply(a, {
+      status: 200,
+      body: '{"jsonrpc":"2.0"}',
+    });
+    expect(() => openReply(b, payload)).toThrow();
+  });
+});
+
 describe("3-layer nested onion", () => {
   it("peels correctly hop-by-hop with only the right keys", () => {
     const hop1 = generateKeypair();
@@ -39,7 +70,7 @@ describe("3-layer nested onion", () => {
     };
     const rpcTargetUrl = "https://example.rpc/sepolia";
 
-    const outer = buildOnion(
+    const { onion: outer, replyKey } = buildOnion(
       rpcPayload,
       [
         { url: "http://127.0.0.1:4001", publicKey: hop1.publicKey },
@@ -48,6 +79,9 @@ describe("3-layer nested onion", () => {
       ],
       rpcTargetUrl,
     );
+
+    expect(typeof replyKey).toBe("string");
+    expect(replyKey.length).toBeGreaterThan(20);
 
     // Hop1 (entry) peels outer layer
     const layer1 = openLayer<{ nextHopUrl: string; innerBlob: string }>(
@@ -71,15 +105,56 @@ describe("3-layer nested onion", () => {
     // Hop1 cannot peel hop2's layer
     expect(() => openLayer(hop1.privateKey, layer1.innerBlob)).toThrow();
 
-    // Hop3 (exit) peels innermost — plaintext RPC
-    const layer3 = openLayer<{ rpcTargetUrl: string; rpcPayload: unknown }>(
-      hop3.privateKey,
-      layer2.innerBlob,
-    );
+    // Hop3 (exit) peels innermost — plaintext RPC + replyKey
+    const layer3 = openLayer<{
+      rpcTargetUrl: string;
+      rpcPayload: unknown;
+      replyKey: string;
+    }>(hop3.privateKey, layer2.innerBlob);
     expect(layer3.rpcTargetUrl).toBe(rpcTargetUrl);
     expect(layer3.rpcPayload).toEqual(rpcPayload);
+    expect(layer3.replyKey).toBe(replyKey);
 
     // Middle cannot see plaintext
     expect(() => openLayer(hop2.privateKey, layer2.innerBlob)).toThrow();
+  });
+
+  it("encrypted reply is not valid JSON-RPC plaintext", () => {
+    const replyKey = generateReplyKey();
+    const rpcBody = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: "0x1234",
+    });
+    const payload = sealReply(replyKey, {
+      status: 200,
+      contentType: "application/json",
+      body: rpcBody,
+    });
+
+    // What entry/middle observe on the wire: { payload: "<ciphertext>" }
+    const wire = JSON.stringify({ payload });
+    const observed = JSON.parse(wire) as { payload?: string; jsonrpc?: string; result?: string };
+    expect(observed.jsonrpc).toBeUndefined();
+    expect(observed.result).toBeUndefined();
+    expect(typeof observed.payload).toBe("string");
+
+    // Ciphertext itself is not JSON-RPC
+    expect(() => {
+      const maybe = JSON.parse(
+        Buffer.from(observed.payload!, "base64").toString("utf8"),
+      );
+      if (maybe && typeof maybe === "object" && "jsonrpc" in maybe) {
+        throw new Error("leaked jsonrpc");
+      }
+    }).toThrow();
+
+    // Client with replyKey recovers plaintext
+    const opened = openReply(replyKey, payload);
+    expect(JSON.parse(opened.body)).toEqual({
+      jsonrpc: "2.0",
+      id: 1,
+      result: "0x1234",
+    });
   });
 });

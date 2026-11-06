@@ -6,5 +6,11 @@ export {
 export type { Keypair } from "./keys.js";
 export { sealLayer, openLayer } from "./seal.js";
 export { buildOnion } from "./onion.js";
-export type { RelayHop } from "./onion.js";
+export type { RelayHop, BuiltOnion } from "./onion.js";
+export {
+  sealReply,
+  openReply,
+  generateReplyKey,
+} from "./reply.js";
+export type { ReplyEnvelope } from "./reply.js";
 export { bytesToBase64, base64ToBytes } from "./encoding.js";

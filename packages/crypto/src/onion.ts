@@ -1,4 +1,5 @@
 import { sealLayer } from "./seal.js";
+import { generateReplyKey } from "./reply.js";
 
 /** A relay hop addressable by URL + public key (base64). */
 export type RelayHop = {
@@ -6,25 +7,32 @@ export type RelayHop = {
   publicKey: string;
 };
 
+export type BuiltOnion = {
+  /** Outer ciphertext (base64) to POST to entry `/relay`. */
+  onion: string;
+  /** Request-scoped 32-byte key (base64) for decrypting the exit reply. */
+  replyKey: string;
+};
+
 /**
  * Build a 3-layer nested onion for entry → middle → exit → RPC.
  *
- * Innermost (exit):  { rpcTargetUrl, rpcPayload }
+ * Innermost (exit):  { rpcTargetUrl, rpcPayload, replyKey }
  * Middle:            { nextHopUrl: exit.url, innerBlob }
  * Outer (entry):     { nextHopUrl: middle.url, innerBlob }
- *
- * Returns the outer ciphertext (base64) to POST to entry `/relay`.
  */
 export function buildOnion(
   rpcPayload: unknown,
   hops: [RelayHop, RelayHop, RelayHop],
   rpcTargetUrl: string,
-): string {
+): BuiltOnion {
   const [entry, middle, exit] = hops;
+  const replyKey = generateReplyKey();
 
   const exitLayer = sealLayer(exit.publicKey, {
     rpcTargetUrl,
     rpcPayload,
+    replyKey,
   });
 
   const middleLayer = sealLayer(middle.publicKey, {
@@ -37,5 +45,5 @@ export function buildOnion(
     innerBlob: middleLayer,
   });
 
-  return entryLayer;
+  return { onion: entryLayer, replyKey };
 }

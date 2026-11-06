@@ -1,4 +1,4 @@
-import { buildOnion, type RelayHop } from "@relay-mesh/crypto";
+import { buildOnion, openReply, type RelayHop } from "@relay-mesh/crypto";
 
 /**
  * Circuit: three relay hops [entry, middle, exit].
@@ -27,7 +27,7 @@ export async function sendViaRelayMesh(
     throw new Error("circuit must contain exactly 3 hops: [entry, middle, exit]");
   }
 
-  const onion = buildOnion(rpcPayload, circuit, rpcTargetUrl);
+  const { onion, replyKey } = buildOnion(rpcPayload, circuit, rpcTargetUrl);
   const entryUrl = circuit[0].url.replace(/\/$/, "") + "/relay";
   const fetchFn = options.fetch ?? fetch;
 
@@ -51,10 +51,27 @@ export async function sendViaRelayMesh(
       throw new Error(`Relay mesh HTTP ${res.status}: ${text.slice(0, 400)}`);
     }
 
+    let wire: { payload?: string };
     try {
-      return JSON.parse(text) as unknown;
+      wire = JSON.parse(text) as { payload?: string };
     } catch {
-      return text;
+      throw new Error("Relay mesh returned non-JSON body");
+    }
+    if (typeof wire.payload !== "string") {
+      throw new Error("Relay mesh response missing sealed payload");
+    }
+
+    // Entry/middle observe only ciphertext; client opens with replyKey.
+    const envelope = openReply(replyKey, wire.payload);
+    if (envelope.status < 200 || envelope.status >= 300) {
+      throw new Error(
+        `Upstream RPC HTTP ${envelope.status}: ${envelope.body.slice(0, 400)}`,
+      );
+    }
+    try {
+      return JSON.parse(envelope.body) as unknown;
+    } catch {
+      return envelope.body;
     }
   } finally {
     if (timer) clearTimeout(timer);
