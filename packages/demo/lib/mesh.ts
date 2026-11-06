@@ -1,4 +1,11 @@
-import { buildOnion, openReply, type RelayHop } from "@relay-mesh/crypto";
+import {
+  buildOnion,
+  generateDemoKey,
+  openObservation,
+  openReply,
+  type HopObservation,
+  type RelayHop,
+} from "@relay-mesh/crypto";
 import type { CircuitRegistry, RegistryNode, RpcPayload } from "./types";
 
 export async function loadRegistry(): Promise<CircuitRegistry> {
@@ -59,15 +66,20 @@ export function pickRandomCircuit(registry: CircuitRegistry): {
   };
 }
 
-export async function fetchClientIp(): Promise<string> {
-  try {
-    const res = await fetch("https://api.ipify.org?format=json");
-    if (!res.ok) return "unknown";
-    const data = (await res.json()) as { ip?: string };
-    return data.ip ?? "unknown";
-  } catch {
-    return "unknown";
+/** Prefer entry hop /whoami (demo mode); never call third-party IP APIs. */
+export async function fetchClientIp(entryHopUrl?: string): Promise<string> {
+  if (entryHopUrl) {
+    try {
+      const res = await fetch(`${entryHopUrl.replace(/\/$/, "")}/whoami`);
+      if (res.ok) {
+        const data = (await res.json()) as { observedIp?: string };
+        if (data.observedIp) return data.observedIp;
+      }
+    } catch {
+      /* fall through */
+    }
   }
+  return "unknown";
 }
 
 export function defaultRpcPayload(): RpcPayload {
@@ -105,21 +117,32 @@ export async function sendViaMeshBrowser(
   rpcPayload: RpcPayload,
   hops: [RelayHop, RelayHop, RelayHop],
   rpcTargetUrl: string,
-): Promise<{ result: unknown; ms: number; onion: string }> {
-  const { onion, replyKey } = buildOnion(rpcPayload, hops, rpcTargetUrl);
+): Promise<{
+  result: unknown;
+  ms: number;
+  onion: string;
+  observations: HopObservation[];
+}> {
+  const demoKey = generateDemoKey();
+  const { onion, replyKey } = buildOnion(rpcPayload, hops, rpcTargetUrl, {
+    demoKey,
+  });
   const entryUrl = hops[0].url.replace(/\/$/, "") + "/relay";
   const t0 = performance.now();
   const res = await fetch(entryUrl, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "x-relay-demo": "1",
+    },
     body: JSON.stringify({ payload: onion }),
   });
   const text = await res.text();
   const ms = Math.round(performance.now() - t0);
   if (!res.ok) throw new Error(`Mesh HTTP ${res.status}: ${text.slice(0, 240)}`);
-  let wire: { payload?: string };
+  let wire: { payload?: string; observations?: string[] };
   try {
-    wire = JSON.parse(text) as { payload?: string };
+    wire = JSON.parse(text) as { payload?: string; observations?: string[] };
   } catch {
     throw new Error("Mesh returned non-JSON body");
   }
@@ -138,7 +161,17 @@ export async function sendViaMeshBrowser(
   } catch {
     /* keep text */
   }
-  return { result, ms, onion };
+
+  const observations: HopObservation[] = [];
+  for (const sealed of wire.observations ?? []) {
+    try {
+      observations.push(openObservation(demoKey, sealed));
+    } catch {
+      /* hop may not have DEMO_LOGGING=true */
+    }
+  }
+
+  return { result, ms, onion, observations };
 }
 
 export function cipherPreview(onionB64: string, max = 96): string {

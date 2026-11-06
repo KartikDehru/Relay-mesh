@@ -61,3 +61,34 @@ export function openReply(replyKeyB64: string, payloadB64: string): ReplyEnvelop
 export function generateReplyKey(): string {
   return bytesToBase64(randomBytes(KEY_LEN));
 }
+
+/** Alias — demo observations use the same symmetric seal as replies. */
+export const generateDemoKey = generateReplyKey;
+
+export type HopObservation = {
+  role: string;
+  observedPeerIp: string;
+  bytesIn: number;
+  payloadSha256Prefix: string;
+  layerType: "forward" | "exit";
+  sawPlaintextQuery: boolean;
+};
+
+export function sealObservation(
+  demoKeyB64: string,
+  observation: HopObservation,
+): string {
+  return sealReply(demoKeyB64, {
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify(observation),
+  });
+}
+
+export function openObservation(
+  demoKeyB64: string,
+  sealedB64: string,
+): HopObservation {
+  const env = openReply(demoKeyB64, sealedB64);
+  return JSON.parse(env.body) as HopObservation;
+}

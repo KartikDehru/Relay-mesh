@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import express, {
   type Application,
   type NextFunction,
@@ -9,19 +10,23 @@ import {
   publicKeyFingerprint,
   publicKeyFromPrivate,
   sealReply,
+  sealObservation,
   stripJsonPadding,
+  type HopObservation,
 } from "@relay-mesh/crypto";
 import { normalizeHopUrl, type RelayConfig } from "./config.js";
 
 type ForwardLayer = {
   nextHopUrl: string;
   innerBlob: string;
+  demoKey?: string;
 };
 
 type ExitLayer = {
   rpcTargetUrl: string;
   rpcPayload: unknown;
   replyKey: string;
+  demoKey?: string;
   _pad?: string;
 };
 
@@ -82,6 +87,33 @@ function clientIp(req: Request): string {
     return xf.split(",")[0]!.trim();
   }
   return req.socket.remoteAddress ?? "unknown";
+}
+
+function isDemoRequest(cfg: RelayConfig, req: Request): boolean {
+  return cfg.demoLogging && req.headers["x-relay-demo"] === "1";
+}
+
+function payloadSha256Prefix(payload: string): string {
+  return createHash("sha256").update(payload, "utf8").digest("hex").slice(0, 16);
+}
+
+function maybeSealObservation(
+  demoKey: string | undefined,
+  observation: HopObservation,
+): string | null {
+  if (!demoKey) return null;
+  try {
+    return sealObservation(demoKey, observation);
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        error: "demo_observation_seal_failed",
+        detail: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return null;
+  }
 }
 
 function corsMiddleware(req: Request, res: Response, next: NextFunction): void {
@@ -164,6 +196,19 @@ export function createApp(cfg: RelayConfig): Application {
     });
   });
 
+  // Demo-only: IP this hop observed for the caller (Railway x-forwarded-for / socket).
+  app.get("/whoami", (req: Request, res: Response) => {
+    if (!cfg.demoLogging) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    res.json({
+      observedIp: clientIp(req),
+      role: cfg.role,
+      fingerprint,
+    });
+  });
+
   const rateLimit = createRateLimiter(cfg.rateLimitPerMinute);
 
   app.post("/relay", rateLimit, async (req: Request, res: Response) => {
@@ -175,6 +220,7 @@ export function createApp(cfg: RelayConfig): Application {
     }
 
     const bytesIn = byteLength(payload);
+    const demo = isDemoRequest(cfg, req);
 
     try {
       await maybeMixDelay(cfg);
@@ -185,12 +231,12 @@ export function createApp(cfg: RelayConfig): Application {
         const exitLayer = stripJsonPadding(
           layer as ExitLayer & { _pad?: string },
         ) as ExitLayer;
-        await handleExit(cfg, req, res, exitLayer, bytesIn, started);
+        await handleExit(cfg, req, res, exitLayer, bytesIn, started, demo, payload);
         return;
       }
 
       if (isForwardLayer(layer)) {
-        await handleForward(cfg, res, layer, bytesIn, started);
+        await handleForward(cfg, req, res, layer, bytesIn, started, demo, payload);
         return;
       }
 
@@ -229,6 +275,8 @@ async function handleExit(
   layer: ExitLayer,
   bytesIn: number,
   started: number,
+  demo: boolean,
+  rawPayload: string,
 ): Promise<void> {
   const targetUrl = normalizeHopUrl(layer.rpcTargetUrl ?? "");
   if (!targetUrl.startsWith("https://")) {
@@ -251,20 +299,6 @@ async function handleExit(
   if (typeof layer.replyKey !== "string" || layer.replyKey.length === 0) {
     res.status(400).json({ error: "Relay hop failed" });
     return;
-  }
-
-  if (cfg.demoLogging) {
-    const observedIp = clientIp(req);
-    console.log(
-      JSON.stringify({
-        ts: new Date().toISOString(),
-        role: cfg.role,
-        event: "demo_plaintext",
-        upstreamIp: observedIp,
-        rpcTargetUrl: targetUrl,
-        rpcPayload: layer.rpcPayload,
-      }),
-    );
   }
 
   let upstream: globalThis.Response;
@@ -301,7 +335,21 @@ async function handleExit(
     contentType: ct,
     body: text,
   });
-  const body = JSON.stringify({ payload: sealed });
+
+  const wire: { payload: string; observations?: string[] } = { payload: sealed };
+  if (demo) {
+    const sealedObs = maybeSealObservation(layer.demoKey, {
+      role: cfg.role,
+      observedPeerIp: clientIp(req),
+      bytesIn,
+      payloadSha256Prefix: payloadSha256Prefix(rawPayload),
+      layerType: "exit",
+      sawPlaintextQuery: true,
+    });
+    if (sealedObs) wire.observations = [sealedObs];
+  }
+
+  const body = JSON.stringify(wire);
   const bytesOut = byteLength(body);
 
   logRequest(cfg.role, bytesIn, bytesOut, started, 200);
@@ -310,10 +358,13 @@ async function handleExit(
 
 async function handleForward(
   cfg: RelayConfig,
+  req: Request,
   res: Response,
   layer: ForwardLayer,
   bytesIn: number,
   started: number,
+  demo: boolean,
+  rawPayload: string,
 ): Promise<void> {
   const nextUrl = normalizeHopUrl(layer.nextHopUrl || cfg.nextHopUrl || "");
   if (!nextUrl) {
@@ -334,13 +385,18 @@ async function handleForward(
   }
 
   const relayUrl = nextUrl + "/relay";
+  const forwardHeaders: Record<string, string> = {
+    "content-type": "application/json",
+  };
+  if (demo) forwardHeaders["x-relay-demo"] = "1";
+
   let upstream: globalThis.Response;
   try {
     upstream = await fetchWithTimeout(
       relayUrl,
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: forwardHeaders,
         body: JSON.stringify({ payload: layer.innerBlob }),
       },
       cfg.upstreamTimeoutMs,
@@ -361,12 +417,37 @@ async function handleForward(
   }
 
   const text = await upstream.text();
-  const bytesOut = byteLength(text);
+  let outBody = text;
+
+  if (demo && upstream.ok) {
+    try {
+      const wire = JSON.parse(text) as {
+        payload?: string;
+        observations?: string[];
+      };
+      const sealedObs = maybeSealObservation(layer.demoKey, {
+        role: cfg.role,
+        observedPeerIp: clientIp(req),
+        bytesIn,
+        payloadSha256Prefix: payloadSha256Prefix(rawPayload),
+        layerType: "forward",
+        sawPlaintextQuery: false,
+      });
+      if (sealedObs && typeof wire.payload === "string") {
+        const observations = [...(wire.observations ?? []), sealedObs];
+        outBody = JSON.stringify({ payload: wire.payload, observations });
+      }
+    } catch {
+      /* pass through unchanged */
+    }
+  }
+
+  const bytesOut = byteLength(outBody);
 
   logRequest(cfg.role, bytesIn, bytesOut, started, upstream.status);
 
   res.status(upstream.status);
   const ct = upstream.headers.get("content-type");
   if (ct) res.setHeader("content-type", ct);
-  res.send(text);
+  res.send(outBody);
 }

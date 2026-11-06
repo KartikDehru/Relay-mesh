@@ -6,14 +6,16 @@ export {
 export type { Keypair } from "./keys.js";
 export { sealLayer, openLayer } from "./seal.js";
 export { buildOnion } from "./onion.js";
-export type { RelayHop, BuiltOnion } from "./onion.js";
+export type { RelayHop, BuiltOnion, BuildOnionOptions } from "./onion.js";
 export {
   sealReply,
   openReply,
   generateReplyKey,
+  generateDemoKey,
+  sealObservation,
+  openObservation,
 } from "./reply.js";
-export type { ReplyEnvelope } from "./reply.js";
-export {
+export type { ReplyEnvelope, HopObservation } from "./reply.js";export {
   PAD_BUCKETS,
   nextBucketSize,
   padJsonObject,

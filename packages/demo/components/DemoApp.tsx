@@ -49,7 +49,7 @@ export function DemoApp() {
           ? pickFixedCircuit(registry)
           : pickRandomCircuit(registry);
       const rpcPayload = defaultRpcPayload();
-      const clientIp = await fetchClientIp();
+      const clientIp = await fetchClientIp(picked.hops[0].url);
 
       setActiveHop(1);
       const meshPromise = sendViaMeshBrowser(
@@ -90,6 +90,7 @@ export function DemoApp() {
         directResult: direct.result,
         directMs: direct.ms,
         mode,
+        observations: mesh.observations,
       });
       setActiveHop(-1);
     } catch (e) {
@@ -366,6 +367,21 @@ function BeforeAfter({
             value={JSON.stringify(capture.meshResult, null, 2)}
             mono
           />
+
+          {capture.observations.length > 0 && (
+            <div style={styles.hopSight}>
+              <h4 style={styles.h4}>Sealed hop observations</h4>
+              <p style={styles.note}>
+                Each hop sealed what it actually saw to a client-only demoKey
+                (requires DEMO_LOGGING=true on the hop).
+              </p>
+              <Field
+                label="Opened records"
+                value={JSON.stringify(capture.observations, null, 2)}
+                mono
+              />
+            </div>
+          )}
         </article>
       </div>
     </section>

@@ -13,6 +13,16 @@ export type BuiltOnion = {
   onion: string;
   /** Request-scoped 32-byte key (base64) for decrypting the exit reply. */
   replyKey: string;
+  /** Present when buildOnion was called with demoKey (demo capture mode). */
+  demoKey?: string;
+};
+
+export type BuildOnionOptions = {
+  /**
+   * When set, included in every layer so DEMO_LOGGING hops can seal
+   * per-hop observations only the client can open.
+   */
+  demoKey?: string;
 };
 
 /**
@@ -27,12 +37,14 @@ export function buildOnion(
   rpcPayload: unknown,
   hops: readonly RelayHop[],
   rpcTargetUrl: string,
+  options: BuildOnionOptions = {},
 ): BuiltOnion {
   if (hops.length < 3) {
     throw new Error("circuit must contain at least 3 hops");
   }
 
   const replyKey = generateReplyKey();
+  const demoKey = options.demoKey;
   const exit = hops[hops.length - 1]!;
 
   let blob = sealLayer(
@@ -41,6 +53,7 @@ export function buildOnion(
       rpcTargetUrl,
       rpcPayload,
       replyKey,
+      ...(demoKey ? { demoKey } : {}),
     }),
   );
 
@@ -50,8 +63,9 @@ export function buildOnion(
     blob = sealLayer(hop.publicKey, {
       nextHopUrl: next.url.replace(/\/$/, ""),
       innerBlob: blob,
+      ...(demoKey ? { demoKey } : {}),
     });
   }
 
-  return { onion: blob, replyKey };
+  return { onion: blob, replyKey, ...(demoKey ? { demoKey } : {}) };
 }

@@ -4,6 +4,8 @@ import { createServer } from "node:http";
 import {
   generateKeypair,
   generateReplyKey,
+  generateDemoKey,
+  openObservation,
   sealLayer,
 } from "@relay-mesh/crypto";
 import { createApp } from "../src/server.js";
@@ -144,5 +146,75 @@ describe("SSRF / allowlist guards", () => {
     expect(res.status).toBe(504);
     const body = (await res.json()) as { error?: string };
     expect(body.error).toBe("Relay hop failed");
+  });
+});
+
+describe("demo mode", () => {
+  it("GET /whoami only when DEMO_LOGGING=true", async () => {
+    const kp = generateKeypair();
+    const off = createApp(baseCfg(kp.privateKey, kp.publicKey));
+    const a = await listen(off);
+    servers.push(a.server);
+    expect((await fetch(`${a.base}/whoami`)).status).toBe(404);
+
+    const on = createApp(
+      baseCfg(kp.privateKey, kp.publicKey, { demoLogging: true }),
+    );
+    const b = await listen(on);
+    servers.push(b.server);
+    const res = await fetch(`${b.base}/whoami`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { observedIp?: string };
+    expect(typeof body.observedIp).toBe("string");
+  });
+
+  it("exit seals an observation when x-relay-demo: 1", async () => {
+    const kp = generateKeypair();
+    const demoKey = generateDemoKey();
+    const replyKey = generateReplyKey();
+    // Local mock HTTPS is hard; allow http by temporarily putting an https URL
+    // that we intercept via a tiny exit that uses allowlisted sepolia — skip
+    // network by using a forward-less exit against allowlisted URL with mock:
+    // Instead seal exit layer and hit real sepolia (integration-ish).
+    const target = "https://ethereum-sepolia-rpc.publicnode.com";
+    const app = createApp(
+      baseCfg(kp.privateKey, kp.publicKey, {
+        demoLogging: true,
+        exitRpcAllowlist: new Set([target]),
+      }),
+    );
+    const { server, base } = await listen(app);
+    servers.push(server);
+
+    const payload = sealLayer(kp.publicKey, {
+      rpcTargetUrl: target,
+      rpcPayload: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_blockNumber",
+        params: [],
+      },
+      replyKey,
+      demoKey,
+    });
+    const res = await fetch(`${base}/relay`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-relay-demo": "1",
+      },
+      body: JSON.stringify({ payload }),
+    });
+    expect(res.status).toBe(200);
+    const wire = (await res.json()) as {
+      payload?: string;
+      observations?: string[];
+    };
+    expect(typeof wire.payload).toBe("string");
+    expect(Array.isArray(wire.observations)).toBe(true);
+    expect(wire.observations!.length).toBe(1);
+    const obs = openObservation(demoKey, wire.observations![0]!);
+    expect(obs.layerType).toBe("exit");
+    expect(obs.sawPlaintextQuery).toBe(true);
   });
 });

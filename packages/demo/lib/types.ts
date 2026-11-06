@@ -25,6 +25,15 @@ export type RpcPayload = {
   params: unknown[];
 };
 
+export type DemoObservation = {
+  role: string;
+  observedPeerIp: string;
+  bytesIn: number;
+  payloadSha256Prefix: string;
+  layerType: "forward" | "exit";
+  sawPlaintextQuery: boolean;
+};
+
 export type CaptureResult = {
   clientIp: string;
   rpcPayload: RpcPayload;
@@ -36,4 +45,5 @@ export type CaptureResult = {
   directResult: unknown;
   directMs: number;
   mode: "fixed" | "random";
+  observations: DemoObservation[];
 };
