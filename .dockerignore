@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.env
+.env.*
+.keys
+*.log
+.DS_Store
+packages/client
+packages/demo
+**/test
+**/*.test.ts
+agent-transcripts
+.cursor

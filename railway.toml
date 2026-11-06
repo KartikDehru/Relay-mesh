@@ -1,0 +1,12 @@
+# Root Railway config — used when deploying from repo root.
+# Each of the 5 hops should be its own Railway *project* under its own account.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

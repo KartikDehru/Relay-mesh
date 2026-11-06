@@ -1,0 +1,21 @@
+# Fallback builder if Dockerfile is not used.
+# Builds only crypto + relay-node from the monorepo.
+
+[phases.setup]
+nixPkgs = ["nodejs_22", "pnpm"]
+
+[phases.install]
+cmds = [
+  "corepack enable",
+  "corepack prepare pnpm@9.15.0 --activate",
+  "pnpm install --filter @relay-mesh/relay-node... --frozen-lockfile",
+]
+
+[phases.build]
+cmds = [
+  "pnpm --filter @relay-mesh/crypto build",
+  "pnpm --filter @relay-mesh/relay-node build",
+]
+
+[start]
+cmd = "node packages/relay-node/dist/index.js"
