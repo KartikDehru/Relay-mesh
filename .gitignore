@@ -1,6 +1,10 @@
 node_modules/
 dist/
+!packages/anon-rpc-worker/dist/
+!packages/anon-rpc-worker/dist/**
 build/
+packages/anon-rpc-worker/specifier/out/
+packages/anon-rpc-worker/specifier/cache/
 coverage/
 .env
 .env.*

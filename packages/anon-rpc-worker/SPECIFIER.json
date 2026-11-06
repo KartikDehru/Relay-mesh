@@ -1,0 +1,14 @@
+{
+  "chainRpc": "https://ethereum-sepolia-rpc.publicnode.com",
+  "chain": "sepolia",
+  "chainId": 11155111,
+  "specifierAddress": "0x005d62b2fB2BbfB05d268990DA6c328F80de28D1",
+  "workerHash": "0xe42b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca",
+  "resolvers": [
+    "https://raw.githubusercontent.com/KartikDehru/Relay-mesh/keccak/e4/2b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca"
+  ],
+  "deployTx": "0x356ed8d5e2a202533d43d1bc808c66cb9b90d4a63b826afb37ce74a286e7a6ed",
+  "deployer": "0xD1411ee0c50F5B1585c481F7e75bC42DC5c20A2A",
+  "etherscan": "https://sepolia.etherscan.io/address/0x005d62b2fB2BbfB05d268990DA6c328F80de28D1",
+  "deployedAt": "2026-11-07T00:24:50.000Z"
+}

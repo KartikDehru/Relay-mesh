@@ -1,0 +1,9 @@
+{
+  "keccak256": "0xe42b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca",
+  "resolvers": [
+    "https://raw.githubusercontent.com/KartikDehru/Relay-mesh/keccak/e4/2b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca"
+  ],
+  "branch": "keccak",
+  "contentPath": "e4/2b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca",
+  "publishedAt": "2026-11-07T00:02:36.327Z"
+}

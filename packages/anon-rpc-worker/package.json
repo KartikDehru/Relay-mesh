@@ -1,0 +1,22 @@
+{
+  "name": "@relay-mesh/anon-rpc-worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "anon-rpc conforming worker that routes JSON-RPC through Relay Mesh",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "hash": "node scripts/hash-bundle.mjs",
+    "typecheck": "tsc --noEmit",
+    "publish:bundle": "node scripts/publish-bundle-github.mjs",
+    "deploy:specifier": "node scripts/deploy-specifier.mjs"
+  },
+  "dependencies": {
+    "@relay-mesh/crypto": "workspace:*"
+  },
+  "devDependencies": {
+    "@noble/hashes": "^1.7.1",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.3"
+  }
+}
