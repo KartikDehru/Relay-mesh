@@ -279,7 +279,11 @@ async function handleExit(
   rawPayload: string,
 ): Promise<void> {
   const targetUrl = normalizeHopUrl(layer.rpcTargetUrl ?? "");
-  if (!targetUrl.startsWith("https://")) {
+  const httpsOk = targetUrl.startsWith("https://");
+  const httpOkForTests =
+    Boolean(cfg.allowInsecureTargetsForTests) &&
+    targetUrl.startsWith("http://");
+  if (!httpsOk && !httpOkForTests) {
     res.status(400).json({ error: "Relay hop failed" });
     return;
   }

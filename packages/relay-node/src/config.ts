@@ -17,6 +17,11 @@ export type RelayConfig = {
   upstreamTimeoutMs: number;
   /** Per-IP /relay rate limit window. */
   rateLimitPerMinute: number;
+  /**
+   * Test-only: allow `http://` exit RPC targets (production stays HTTPS-only).
+   * Set in unit/integration test files when constructing RelayConfig — never via env.
+   */
+  allowInsecureTargetsForTests?: boolean;
 };
 
 function requireEnv(name: string): string {

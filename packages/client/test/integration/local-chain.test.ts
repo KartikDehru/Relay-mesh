@@ -1,180 +1,178 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { spawn, type ChildProcess } from "node:child_process";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import type { Server } from "node:http";
+import { createServer } from "node:http";
 import { generateKeypair } from "@relay-mesh/crypto";
+import { createApp } from "../../../relay-node/src/server.js";
+import type { RelayConfig } from "../../../relay-node/src/config.js";
 import { sendViaRelayMesh } from "../../src/send.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(__dirname, "../../../..");
-const relayEntry = path.resolve(
-  repoRoot,
-  "packages/relay-node/src/index.ts",
-);
+type Listening = { server: Server; port: number; base: string };
 
-const EXIT_RPC_URL =
-  process.env.EXIT_RPC_URL ??
-  process.env.SEPOLIA_RPC_URL ??
-  "https://ethereum-sepolia-rpc.publicnode.com";
-
-type Hop = {
-  port: number;
-  role: "entry" | "middle" | "exit";
-  keypair: ReturnType<typeof generateKeypair>;
-  proc?: ChildProcess;
-};
-
-async function waitForHealth(port: number, timeoutMs = 20_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  let lastErr = "";
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/health`);
-      if (res.ok) return;
-      lastErr = `status ${res.status}`;
-    } catch (e) {
-      lastErr = e instanceof Error ? e.message : String(e);
-    }
-    await new Promise((r) => setTimeout(r, 200));
-  }
-  throw new Error(`Hop on :${port} never became healthy (${lastErr})`);
+function listenApp(app: ReturnType<typeof createApp>): Promise<Listening> {
+  return new Promise((resolve) => {
+    const server = app.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      if (!addr || typeof addr === "string") throw new Error("no port");
+      resolve({
+        server,
+        port: addr.port,
+        base: `http://127.0.0.1:${addr.port}`,
+      });
+    });
+  });
 }
 
-function startHop(hop: Hop, envExtra: Record<string, string>): ChildProcess {
-  const proc = spawn(
-    "pnpm",
-    ["exec", "tsx", relayEntry],
-    {
-      cwd: path.resolve(repoRoot, "packages/relay-node"),
-      env: {
-        ...process.env,
-        ROLE: hop.role,
-        PORT: String(hop.port),
-        RELAY_PRIVATE_KEY: hop.keypair.privateKey,
-        RELAY_PUBLIC_KEY: hop.keypair.publicKey,
-        ...envExtra,
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    },
+/** Offline mock JSON-RPC — returns a fixed eth_blockNumber-shaped result. */
+function startMockRpc(): Promise<Listening> {
+  const server = createServer((req, res) => {
+    if (req.method !== "POST") {
+      res.writeHead(405);
+      res.end();
+      return;
+    }
+    const chunks: Buffer[] = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => {
+      let id: unknown = 1;
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+          id?: unknown;
+        };
+        if (body.id !== undefined) id = body.id;
+      } catch {
+        /* keep default */
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ jsonrpc: "2.0", id, result: "0x1234" }));
+    });
+  });
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      if (!addr || typeof addr === "string") throw new Error("no port");
+      resolve({
+        server,
+        port: addr.port,
+        base: `http://127.0.0.1:${addr.port}`,
+      });
+    });
+  });
+}
+
+async function closeServers(servers: Server[]): Promise<void> {
+  await Promise.all(
+    servers.map(
+      (s) =>
+        new Promise<void>((resolve) => {
+          s.close(() => resolve());
+        }),
+    ),
   );
+}
 
-  proc.stdout?.on("data", (buf: Buffer) => {
-    process.stdout.write(`[hop${hop.port}] ${buf.toString()}`);
-  });
-  proc.stderr?.on("data", (buf: Buffer) => {
-    process.stderr.write(`[hop${hop.port}:err] ${buf.toString()}`);
-  });
+function makeCfg(
+  role: RelayConfig["role"],
+  keypair: ReturnType<typeof generateKeypair>,
+  allowedHopUrls: Set<string>,
+  mockRpcUrl: string,
+): RelayConfig {
+  return {
+    role,
+    privateKey: keypair.privateKey,
+    publicKey: keypair.publicKey,
+    port: 0,
+    nextHopUrl: undefined,
+    demoLogging: false,
+    mixDelayMsMin: 0,
+    mixDelayMsMax: 0,
+    allowedHopUrls,
+    exitRpcAllowlist: new Set([mockRpcUrl]),
+    upstreamTimeoutMs: 10_000,
+    rateLimitPerMinute: 1000,
+    // Test-only — never wired through loadConfig / env.
+    allowInsecureTargetsForTests: true,
+  };
+}
 
-  return proc;
+type MeshFixture = {
+  servers: Server[];
+  mockRpcUrl: string;
+  circuit: Array<{ url: string; publicKey: string }>;
+};
+
+/**
+ * Start N in-process hops + a local mock RPC.
+ * Shared allowlist Set is mutated after each listen so every hop accepts peers.
+ */
+async function startMesh(hopCount: 3 | 4): Promise<MeshFixture> {
+  const servers: Server[] = [];
+  const mock = await startMockRpc();
+  servers.push(mock.server);
+  const mockRpcUrl = mock.base;
+
+  const roles: RelayConfig["role"][] =
+    hopCount === 3
+      ? ["entry", "middle", "exit"]
+      : ["entry", "middle", "middle", "exit"];
+  const keypairs = roles.map(() => generateKeypair());
+  const sharedAllow = new Set<string>();
+  const circuit: Array<{ url: string; publicKey: string }> = [];
+
+  for (let i = 0; i < hopCount; i++) {
+    const app = createApp(
+      makeCfg(roles[i]!, keypairs[i]!, sharedAllow, mockRpcUrl),
+    );
+    const listening = await listenApp(app);
+    servers.push(listening.server);
+    sharedAllow.add(listening.base);
+    circuit.push({
+      url: listening.base,
+      publicKey: keypairs[i]!.publicKey,
+    });
+  }
+
+  return { servers, mockRpcUrl, circuit };
 }
 
 describe("local 3-hop chain", () => {
-  const hops: Hop[] = [
-    { port: 4001, role: "entry", keypair: generateKeypair() },
-    { port: 4002, role: "middle", keypair: generateKeypair() },
-    { port: 4003, role: "exit", keypair: generateKeypair() },
-  ];
+  let fixture: MeshFixture;
 
   beforeAll(async () => {
-    const allowed =
-      `http://127.0.0.1:${hops[0]!.port},` +
-      `http://127.0.0.1:${hops[1]!.port},` +
-      `http://127.0.0.1:${hops[2]!.port}`;
-    const exitAllow = JSON.stringify({
-      "11155111": EXIT_RPC_URL,
-    });
-    hops[0]!.proc = startHop(hops[0]!, {
-      NEXT_HOP_URL: `http://127.0.0.1:${hops[1]!.port}`,
-      ALLOWED_HOP_URLS: allowed,
-      EXIT_RPC_ALLOWLIST: exitAllow,
-    });
-    hops[1]!.proc = startHop(hops[1]!, {
-      NEXT_HOP_URL: `http://127.0.0.1:${hops[2]!.port}`,
-      ALLOWED_HOP_URLS: allowed,
-      EXIT_RPC_ALLOWLIST: exitAllow,
-    });
-    hops[2]!.proc = startHop(hops[2]!, {
-      ALLOWED_HOP_URLS: allowed,
-      EXIT_RPC_ALLOWLIST: exitAllow,
-    });
-
-    await Promise.all(hops.map((h) => waitForHealth(h.port)));
-  }, 45_000);
+    fixture = await startMesh(3);
+  }, 30_000);
 
   afterAll(async () => {
-    for (const h of hops) {
-      if (!h.proc || h.proc.killed) continue;
-      h.proc.kill("SIGTERM");
-    }
-    // Give processes a moment to exit
-    await new Promise((r) => setTimeout(r, 300));
+    await closeServers(fixture.servers);
   });
 
   it("returns a valid eth_blockNumber through the onion chain", async () => {
-    const circuit = [
-      {
-        url: `http://127.0.0.1:${hops[0]!.port}`,
-        publicKey: hops[0]!.keypair.publicKey,
-      },
-      {
-        url: `http://127.0.0.1:${hops[1]!.port}`,
-        publicKey: hops[1]!.keypair.publicKey,
-      },
-      {
-        url: `http://127.0.0.1:${hops[2]!.port}`,
-        publicKey: hops[2]!.keypair.publicKey,
-      },
-    ] as const;
-
-    const rpcPayload = {
-      jsonrpc: "2.0",
-      id: 1,
-      method: "eth_blockNumber",
-      params: [],
-    };
-
     const result = (await sendViaRelayMesh(
-      rpcPayload,
-      [...circuit],
-      EXIT_RPC_URL,
-      { timeoutMs: 30_000 },
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_blockNumber",
+        params: [],
+      },
+      fixture.circuit,
+      fixture.mockRpcUrl,
+      { timeoutMs: 15_000 },
     )) as { jsonrpc?: string; id?: number; result?: string; error?: unknown };
 
     expect(result.error).toBeUndefined();
     expect(result.jsonrpc).toBe("2.0");
     expect(result.id).toBe(1);
-    expect(typeof result.result).toBe("string");
-    expect(result.result).toMatch(/^0x[0-9a-fA-F]+$/);
-
-    const blockNum = parseInt(result.result!, 16);
-    expect(blockNum).toBeGreaterThan(0);
-    console.log(`eth_blockNumber via mesh => ${result.result} (${blockNum})`);
+    expect(result.result).toBe("0x1234");
   });
 
   it("entry/middle wire body is sealed ciphertext, not JSON-RPC plaintext", async () => {
     const { buildOnion } = await import("@relay-mesh/crypto");
-    const circuit = [
-      {
-        url: `http://127.0.0.1:${hops[0]!.port}`,
-        publicKey: hops[0]!.keypair.publicKey,
-      },
-      {
-        url: `http://127.0.0.1:${hops[1]!.port}`,
-        publicKey: hops[1]!.keypair.publicKey,
-      },
-      {
-        url: `http://127.0.0.1:${hops[2]!.port}`,
-        publicKey: hops[2]!.keypair.publicKey,
-      },
-    ] as const;
-
     const { onion } = buildOnion(
       { jsonrpc: "2.0", id: 2, method: "eth_blockNumber", params: [] },
-      [...circuit],
-      EXIT_RPC_URL,
+      fixture.circuit,
+      fixture.mockRpcUrl,
     );
 
-    const res = await fetch(`http://127.0.0.1:${hops[0]!.port}/relay`, {
+    const res = await fetch(`${fixture.circuit[0]!.url}/relay`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ payload: onion }),
@@ -193,60 +191,25 @@ describe("local 3-hop chain", () => {
 });
 
 describe("local 4-hop chain", () => {
-  const hops: Hop[] = [
-    { port: 4011, role: "entry", keypair: generateKeypair() },
-    { port: 4012, role: "middle", keypair: generateKeypair() },
-    { port: 4013, role: "middle", keypair: generateKeypair() },
-    { port: 4014, role: "exit", keypair: generateKeypair() },
-  ];
+  let fixture: MeshFixture;
 
   beforeAll(async () => {
-    const allowed = hops.map((h) => `http://127.0.0.1:${h.port}`).join(",");
-    const exitAllow = JSON.stringify({ "11155111": EXIT_RPC_URL });
-    const common = {
-      ALLOWED_HOP_URLS: allowed,
-      EXIT_RPC_ALLOWLIST: exitAllow,
-    };
-    hops[0]!.proc = startHop(hops[0]!, {
-      ...common,
-      NEXT_HOP_URL: `http://127.0.0.1:${hops[1]!.port}`,
-    });
-    hops[1]!.proc = startHop(hops[1]!, {
-      ...common,
-      NEXT_HOP_URL: `http://127.0.0.1:${hops[2]!.port}`,
-    });
-    hops[2]!.proc = startHop(hops[2]!, {
-      ...common,
-      NEXT_HOP_URL: `http://127.0.0.1:${hops[3]!.port}`,
-    });
-    hops[3]!.proc = startHop(hops[3]!, common);
-
-    await Promise.all(hops.map((h) => waitForHealth(h.port)));
-  }, 45_000);
+    fixture = await startMesh(4);
+  }, 30_000);
 
   afterAll(async () => {
-    for (const h of hops) {
-      if (!h.proc || h.proc.killed) continue;
-      h.proc.kill("SIGTERM");
-    }
-    await new Promise((r) => setTimeout(r, 300));
+    await closeServers(fixture.servers);
   });
 
   it("returns eth_blockNumber through 4 hops", async () => {
-    const circuit = hops.map((h) => ({
-      url: `http://127.0.0.1:${h.port}`,
-      publicKey: h.keypair.publicKey,
-    }));
-
     const result = (await sendViaRelayMesh(
       { jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] },
-      circuit,
-      EXIT_RPC_URL,
-      { timeoutMs: 30_000 },
+      fixture.circuit,
+      fixture.mockRpcUrl,
+      { timeoutMs: 15_000 },
     )) as { result?: string; error?: unknown };
 
     expect(result.error).toBeUndefined();
-    expect(result.result).toMatch(/^0x[0-9a-fA-F]+$/);
-    console.log(`eth_blockNumber via 4-hop mesh => ${result.result}`);
+    expect(result.result).toBe("0x1234");
   });
 });

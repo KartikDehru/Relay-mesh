@@ -154,9 +154,9 @@ pnpm dev:demo                  # http://localhost:3000
 | Command | Proves |
 |---|---|
 | `pnpm test:crypto` | Seal/open, replyKey round-trip, bucket padding, N-hop peel, ciphertext ≠ JSON-RPC |
-| `pnpm --filter @relay-mesh/relay-node test` | Non-allowlisted forward/exit rejected; upstream timeout → 504; demo `/whoami` + sealed observations |
-| `pnpm test:integration` | Local 3-hop and 4-hop `eth_blockNumber` through sealed replies |
-| `pnpm test:live` | Fixed Railway circuit returns a valid block number |
+| `pnpm --filter @relay-mesh/relay-node test` | Non-allowlisted forward/exit rejected; HTTPS-only exit targets; upstream timeout → 504; demo `/whoami` + sealed observations against a local mock JSON-RPC (offline) |
+| `pnpm test:integration` | Local 3-hop and 4-hop `eth_blockNumber` through sealed replies against an in-process mock JSON-RPC (offline; no public RPC) |
+| `pnpm test:live` | Fixed Railway circuit returns a valid block number (`LIVE_CIRCUIT=1`) |
 | `pnpm check-hops` | Each registry hop `/health` matches fingerprint |
 
 ## Security hardening

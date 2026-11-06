@@ -6,6 +6,7 @@ import {
   generateReplyKey,
   generateDemoKey,
   openObservation,
+  openReply,
   sealLayer,
 } from "@relay-mesh/crypto";
 import { createApp } from "../src/server.js";
@@ -16,6 +17,45 @@ type Listening = { server: Server; port: number; base: string };
 function listen(app: ReturnType<typeof createApp>): Promise<Listening> {
   return new Promise((resolve) => {
     const server = app.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      if (!addr || typeof addr === "string") throw new Error("no port");
+      resolve({
+        server,
+        port: addr.port,
+        base: `http://127.0.0.1:${addr.port}`,
+      });
+    });
+  });
+}
+
+/** Local mock JSON-RPC — no network. Echoes id and a fixed result. */
+function startMockRpc(): Promise<Listening> {
+  const server = createServer((req, res) => {
+    if (req.method !== "POST") {
+      res.writeHead(405);
+      res.end();
+      return;
+    }
+    const chunks: Buffer[] = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => {
+      let id: unknown = 1;
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+          id?: unknown;
+        };
+        if (body.id !== undefined) id = body.id;
+      } catch {
+        /* keep default id */
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({ jsonrpc: "2.0", id, result: "0x1234" }),
+      );
+    });
+  });
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
       const addr = server.address();
       if (!addr || typeof addr === "string") throw new Error("no port");
       resolve({
@@ -110,6 +150,32 @@ describe("SSRF / allowlist guards", () => {
     expect(body.detail).toBeUndefined();
   });
 
+  it("rejects http exit targets unless allowInsecureTargetsForTests is set", async () => {
+    const mock = await startMockRpc();
+    servers.push(mock.server);
+    const kp = generateKeypair();
+    const app = createApp(
+      baseCfg(kp.privateKey, kp.publicKey, {
+        exitRpcAllowlist: new Set([mock.base]),
+        // flag intentionally omitted
+      }),
+    );
+    const { server, base } = await listen(app);
+    servers.push(server);
+
+    const payload = sealLayer(kp.publicKey, {
+      rpcTargetUrl: mock.base,
+      rpcPayload: { jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] },
+      replyKey: generateReplyKey(),
+    });
+    const res = await fetch(`${base}/relay`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ payload }),
+    });
+    expect(res.status).toBe(400);
+  });
+
   it("returns 504 on upstream timeout", async () => {
     const hang = createServer((_req, _res) => {
       /* never responds */
@@ -121,8 +187,6 @@ describe("SSRF / allowlist guards", () => {
     const hangAddr = hang.address();
     if (!hangAddr || typeof hangAddr === "string") throw new Error("no hang port");
 
-    // Forward hop times out against a hanging next hop (exit path also uses
-    // the same AbortController helper).
     const kp = generateKeypair();
     const hangHttp = `http://127.0.0.1:${hangAddr.port}`;
     const app = createApp(
@@ -169,25 +233,24 @@ describe("demo mode", () => {
   });
 
   it("exit seals an observation when x-relay-demo: 1", async () => {
+    const mock = await startMockRpc();
+    servers.push(mock.server);
+
     const kp = generateKeypair();
     const demoKey = generateDemoKey();
     const replyKey = generateReplyKey();
-    // Local mock HTTPS is hard; allow http by temporarily putting an https URL
-    // that we intercept via a tiny exit that uses allowlisted sepolia — skip
-    // network by using a forward-less exit against allowlisted URL with mock:
-    // Instead seal exit layer and hit real sepolia (integration-ish).
-    const target = "https://ethereum-sepolia-rpc.publicnode.com";
     const app = createApp(
       baseCfg(kp.privateKey, kp.publicKey, {
         demoLogging: true,
-        exitRpcAllowlist: new Set([target]),
+        exitRpcAllowlist: new Set([mock.base]),
+        allowInsecureTargetsForTests: true,
       }),
     );
     const { server, base } = await listen(app);
     servers.push(server);
 
     const payload = sealLayer(kp.publicKey, {
-      rpcTargetUrl: target,
+      rpcTargetUrl: mock.base,
       rpcPayload: {
         jsonrpc: "2.0",
         id: 1,
@@ -216,5 +279,11 @@ describe("demo mode", () => {
     const obs = openObservation(demoKey, wire.observations![0]!);
     expect(obs.layerType).toBe("exit");
     expect(obs.sawPlaintextQuery).toBe(true);
+
+    const opened = openReply(replyKey, wire.payload!);
+    expect(opened.status).toBe(200);
+    const rpc = JSON.parse(opened.body) as { result?: string; id?: number };
+    expect(rpc.result).toBe("0x1234");
+    expect(rpc.id).toBe(1);
   });
 });
