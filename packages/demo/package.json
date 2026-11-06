@@ -1,0 +1,25 @@
+{
+  "name": "@relay-mesh/demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Relay Mesh demo dashboard — Vercel static/Next.js, browser-side onion only",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "test": "echo \"demo has no unit tests\""
+  },
+  "dependencies": {
+    "@relay-mesh/client": "workspace:*",
+    "@relay-mesh/crypto": "workspace:*",
+    "next": "^15.1.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "typescript": "^5.7.3"
+  }
+}

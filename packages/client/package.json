@@ -1,0 +1,29 @@
+{
+  "name": "@relay-mesh/client",
+  "version": "0.1.0",
+  "description": "Client library: build onion payloads and send through Relay Mesh",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run test/registry.test.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@relay-mesh/crypto": "workspace:*"
+  },
+  "devDependencies": {
+    "@relay-mesh/relay-node": "workspace:*",
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}

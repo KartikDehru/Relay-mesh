@@ -1,0 +1,26 @@
+{
+  "name": "relay-mesh",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Relay Mesh — 3-hop onion-routed relay network for private JSON-RPC calls (ETHGlobal Mumbai)",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "test:crypto": "pnpm --filter @relay-mesh/crypto test",
+    "test:integration": "pnpm --filter @relay-mesh/client test:integration",
+    "test:live": "LIVE_CIRCUIT=1 pnpm --filter @relay-mesh/client test:integration",
+    "smoke:five": "node scripts/smoke-five-local.mjs",
+    "generate-keys": "pnpm --filter @relay-mesh/crypto generate-keys",
+    "check-hops": "node scripts/check-hops.mjs",
+    "set-hop-url": "node scripts/set-registry-url.mjs",
+    "deploy:hop": "bash scripts/deploy-hop.sh",
+    "dev:hop1": "pnpm --filter @relay-mesh/relay-node dev",
+    "dev:demo": "pnpm --filter @relay-mesh/demo dev",
+    "build:demo": "pnpm --filter @relay-mesh/crypto build && pnpm --filter @relay-mesh/client build && pnpm --filter @relay-mesh/demo build",
+    "lint": "pnpm -r run lint --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
