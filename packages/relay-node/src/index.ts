@@ -1,7 +1,7 @@
 import { createApp } from "./server.js";
 import { loadConfig } from "./config.js";
 
-const cfg = loadConfig();
+const cfg = await loadConfig();
 const app = createApp(cfg);
 
 const server = app.listen(cfg.port, () => {
@@ -11,6 +11,8 @@ const server = app.listen(cfg.port, () => {
       event: "listen",
       role: cfg.role,
       port: cfg.port,
+      allowedHops: cfg.allowedHopUrls.size,
+      exitTargets: cfg.exitRpcAllowlist.size,
     }),
   );
 });

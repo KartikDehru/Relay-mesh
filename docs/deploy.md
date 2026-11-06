@@ -36,9 +36,13 @@ Or in the Railway dashboard for each account:
 | `ROLE` | `entry` / `middle` / `exit` / `any` (informational; routing is content-addressed) |
 | `RELAY_PRIVATE_KEY` | from `.keys/hop-secrets.env` for that hop |
 | `RELAY_PUBLIC_KEY` | matching public key |
-| `EXIT_RPC_URL` | optional override; omit to use the onion's `rpcTargetUrl` |
-| `DEMO_LOGGING` | `false` (set `true` on exit only when capturing demo traces) |
+| `ALLOWED_HOP_URLS` | comma-separated hop base URLs this node may forward to |
+| `EXIT_RPC_ALLOWLIST` | JSON map of chainId → https RPC URL; exit only calls exact matches |
+| `CIRCUIT_REGISTRY_URL` | optional alternate source for hop allowlist at boot |
+| `DEMO_LOGGING` | `false` (set `true` when capturing sealed demo observations) |
 | `MIX_DELAY_MS_MIN` / `MIX_DELAY_MS_MAX` | optional timing blur (e.g. `40` / `180`) |
+| `UPSTREAM_TIMEOUT_MS` | default `10000` |
+| `RATE_LIMIT_PER_MINUTE` | default `60` on `/relay` |
 | `PORT` | injected by Railway — do not hardcode |
 
 4. Generate a public domain (`Settings → Networking → Generate Domain`).

@@ -76,14 +76,26 @@ describe("local 3-hop chain", () => {
   ];
 
   beforeAll(async () => {
+    const allowed =
+      `http://127.0.0.1:${hops[0]!.port},` +
+      `http://127.0.0.1:${hops[1]!.port},` +
+      `http://127.0.0.1:${hops[2]!.port}`;
+    const exitAllow = JSON.stringify({
+      "11155111": EXIT_RPC_URL,
+    });
     hops[0]!.proc = startHop(hops[0]!, {
       NEXT_HOP_URL: `http://127.0.0.1:${hops[1]!.port}`,
+      ALLOWED_HOP_URLS: allowed,
+      EXIT_RPC_ALLOWLIST: exitAllow,
     });
     hops[1]!.proc = startHop(hops[1]!, {
       NEXT_HOP_URL: `http://127.0.0.1:${hops[2]!.port}`,
+      ALLOWED_HOP_URLS: allowed,
+      EXIT_RPC_ALLOWLIST: exitAllow,
     });
     hops[2]!.proc = startHop(hops[2]!, {
-      EXIT_RPC_URL,
+      ALLOWED_HOP_URLS: allowed,
+      EXIT_RPC_ALLOWLIST: exitAllow,
     });
 
     await Promise.all(hops.map((h) => waitForHealth(h.port)));
