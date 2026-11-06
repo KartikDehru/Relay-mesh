@@ -338,6 +338,11 @@ function HealthStrip({
           <div style={styles.healthMeta}>
             {h.latencyMs != null ? `${h.latencyMs} ms` : "—"}
             {h.error ? ` · ${h.error}` : " · /health"}
+            {h.commit && h.commit !== "unknown"
+              ? ` · ${h.commit.slice(0, 7)}`
+              : h.commit === "unknown"
+                ? " · commit unknown"
+                : ""}
           </div>
         </a>
       ))}
@@ -646,7 +651,10 @@ function VerifySection({ registry }: { registry: CircuitRegistry }) {
     <section style={styles.verify} className="anim-rise">
       <h2 style={styles.h2}>Verify it yourself</h2>
       <p style={styles.compareSub}>
-        Independent checks a judge can open without trusting this page.
+        Independent checks a judge can open without trusting this page. Compare
+        each hop&apos;s <code style={styles.mono}>commit</code> on{" "}
+        <code style={styles.mono}>/health</code> — matching short-hashes mean
+        the same build.
       </p>
       <ul style={styles.verifyList}>
         {nodes.map((n) => (

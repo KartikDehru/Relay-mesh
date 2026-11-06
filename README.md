@@ -23,9 +23,17 @@ Relay Mesh is a **3-hop onion-routed relay network** for private JSON-RPC calls.
 | Circuit registry | [`circuit-registry.json`](./circuit-registry.json) |
 | Worker resolver | [keccak path](https://raw.githubusercontent.com/KartikDehru/Relay-mesh/keccak/f9/85be89550e8fea776ff7a88a470b114a0420bdc3a204c1a21239dc117a2154) |
 
-Health check any hop: `GET /health` → `{ role, fingerprint, publicKey }`.
+Health check any hop: `GET /health` → `{ role, fingerprint, publicKey, version, commit }`.
 
 Fixed MVP circuit: **hop1 → hop2 → hop3**. Hop 4 is a live spare; hop 5 is reserved.
+
+## Verify it yourself
+
+Judges can confirm the live path without trusting this README:
+
+1. Open each hop’s [`/health`](https://hop1-production-70b7.up.railway.app/health) — compare `fingerprint`, `version`, and `commit` (`RAILWAY_GIT_COMMIT_SHA`). Matching `commit` short-hashes across hop1–hop4 means they run the same build.
+2. Hit the [live demo](https://relay-mesh-zeta.vercel.app) health strip (shows the short commit next to each hop).
+3. Check the [Sepolia specifier](https://sepolia.etherscan.io/address/0x005d62b2fB2BbfB05d268990DA6c328F80de28D1) and recompute the worker keccak (see Tests / on-chain table).
 
 ## On-chain (Sepolia)
 

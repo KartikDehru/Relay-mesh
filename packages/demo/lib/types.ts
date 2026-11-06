@@ -44,6 +44,10 @@ export type HopHealthStatus = {
   url: string;
   ok: boolean;
   latencyMs: number | null;
+  /** package.json version from GET /health */
+  version?: string;
+  /** Full git SHA from GET /health (RAILWAY_GIT_COMMIT_SHA) */
+  commit?: string;
   error?: string;
 };
 

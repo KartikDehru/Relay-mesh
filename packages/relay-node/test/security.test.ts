@@ -213,6 +213,32 @@ describe("SSRF / allowlist guards", () => {
   });
 });
 
+describe("health provenance", () => {
+  it("GET /health includes version and commit", async () => {
+    const kp = generateKeypair();
+    const prev = process.env.RAILWAY_GIT_COMMIT_SHA;
+    process.env.RAILWAY_GIT_COMMIT_SHA = "abcdef0123456789deadbeef";
+    try {
+      const app = createApp(baseCfg(kp.privateKey, kp.publicKey));
+      const { server, base } = await listen(app);
+      servers.push(server);
+      const res = await fetch(`${base}/health`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        version?: string;
+        commit?: string;
+        ok?: boolean;
+      };
+      expect(body.ok).toBe(true);
+      expect(body.version).toMatch(/^\d+\.\d+\.\d+/);
+      expect(body.commit).toBe("abcdef0123456789deadbeef");
+    } finally {
+      if (prev === undefined) delete process.env.RAILWAY_GIT_COMMIT_SHA;
+      else process.env.RAILWAY_GIT_COMMIT_SHA = prev;
+    }
+  });
+});
+
 describe("demo mode", () => {
   it("GET /whoami only when DEMO_LOGGING=true", async () => {
     const kp = generateKeypair();

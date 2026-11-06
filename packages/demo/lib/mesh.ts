@@ -102,6 +102,8 @@ export async function probeHopHealth(
         const body = (await res.json()) as {
           fingerprint?: string;
           role?: string;
+          version?: string;
+          commit?: string;
         };
         return {
           id: n.id,
@@ -110,6 +112,8 @@ export async function probeHopHealth(
           url: base,
           ok: true,
           latencyMs,
+          version: body.version,
+          commit: body.commit,
         };
       } catch (e) {
         return {

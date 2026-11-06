@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import express, {
   type Application,
   type NextFunction,
@@ -15,6 +18,24 @@ import {
   type HopObservation,
 } from "@relay-mesh/crypto";
 import { normalizeHopUrl, type RelayConfig } from "./config.js";
+
+const PACKAGE_VERSION: string = (() => {
+  try {
+    const pkgPath = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "package.json",
+    );
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { version?: string };
+    return pkg.version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+})();
+
+function buildCommit(): string {
+  return process.env.RAILWAY_GIT_COMMIT_SHA?.trim() || "unknown";
+}
 
 type ForwardLayer = {
   nextHopUrl: string;
@@ -193,6 +214,8 @@ export function createApp(cfg: RelayConfig): Application {
       publicKey,
       service: "relay-mesh",
       independentAccount: true,
+      version: PACKAGE_VERSION,
+      commit: buildCommit(),
     });
   });
 
