@@ -18,7 +18,7 @@ Relay Mesh is a **3-hop onion-routed relay network** for private JSON-RPC calls.
 | Circuit registry | [`circuit-registry.json`](./circuit-registry.json) |
 | Demo dashboard | `pnpm dev:demo` → http://localhost:3000 |
 | Anon-RPC reference demo | https://ethereum.github.io/anon-rpc/demo/ |
-| Worker resolver (raw bytes) | [keccak path](https://raw.githubusercontent.com/KartikDehru/Relay-mesh/keccak/e4/2b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca) |
+| Worker resolver (raw bytes) | [keccak path](https://raw.githubusercontent.com/KartikDehru/Relay-mesh/keccak/f9/85be89550e8fea776ff7a88a470b114a0420bdc3a204c1a21239dc117a2154) |
 
 Health check any hop: `GET /health` → `{ role, fingerprint, publicKey }`.
 
@@ -28,15 +28,16 @@ Fixed MVP circuit: **hop1 → hop2 → hop3**. Hop 4 is a live spare; hop 5 is r
 
 | | |
 |---|---|
-| Worker keccak256 | `0xe42b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca` |
+| Worker keccak256 | `0xf985be89550e8fea776ff7a88a470b114a0420bdc3a204c1a21239dc117a2154` |
 | Specifier | [`0x005d62b2fB2BbfB05d268990DA6c328F80de28D1`](https://sepolia.etherscan.io/address/0x005d62b2fB2BbfB05d268990DA6c328F80de28D1) |
 | Deploy tx | [`0x356ed8d5…e7a6ed`](https://sepolia.etherscan.io/tx/0x356ed8d5e2a202533d43d1bc808c66cb9b90d4a63b826afb37ce74a286e7a6ed) |
+| Worker update tx | [`0x91a92c4e…2088e0`](https://sepolia.etherscan.io/tx/0x91a92c4e43eb4f057a2be85a34440529e1f12ccd4cd09e42fc0a9a35a12088e0) |
 | Metadata | [`packages/anon-rpc-worker/SPECIFIER.json`](./packages/anon-rpc-worker/SPECIFIER.json) |
 
 Harnesses MUST reject any bytes whose `keccak256` does not equal `workerHash()`. Resolver URLs are advisory only.
 
 Relay Mesh is published as a worker bundle at
-`0xe42b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca`,
+`0xf985be89550e8fea776ff7a88a470b114a0420bdc3a204c1a21239dc117a2154`,
 resolvable via specifier contract
 [`0x005d62b2fB2BbfB05d268990DA6c328F80de28D1`](https://sepolia.etherscan.io/address/0x005d62b2fB2BbfB05d268990DA6c328F80de28D1)
 (Sepolia).

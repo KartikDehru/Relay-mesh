@@ -1,9 +1,9 @@
 {
-  "keccak256": "0xe42b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca",
+  "keccak256": "0xf985be89550e8fea776ff7a88a470b114a0420bdc3a204c1a21239dc117a2154",
   "resolvers": [
-    "https://raw.githubusercontent.com/KartikDehru/Relay-mesh/keccak/e4/2b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca"
+    "https://raw.githubusercontent.com/KartikDehru/Relay-mesh/keccak/f9/85be89550e8fea776ff7a88a470b114a0420bdc3a204c1a21239dc117a2154"
   ],
   "branch": "keccak",
-  "contentPath": "e4/2b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca",
-  "publishedAt": "2026-11-07T00:02:36.327Z"
+  "contentPath": "f9/85be89550e8fea776ff7a88a470b114a0420bdc3a204c1a21239dc117a2154",
+  "publishedAt": "2026-11-07T01:08:19.521Z"
 }

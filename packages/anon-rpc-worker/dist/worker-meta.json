@@ -1,7 +1,7 @@
 {
   "file": "dist/relay-mesh-worker.js",
-  "bytes": 110495,
-  "keccak256": "0xe42b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca",
-  "sha256": "f632c1b6bb8168444c5389e4033d3ac7e91baddaf080671adc3d10284c13e7f5",
-  "builtAt": "2026-11-07T00:00:49.201Z"
+  "bytes": 114292,
+  "keccak256": "0xf985be89550e8fea776ff7a88a470b114a0420bdc3a204c1a21239dc117a2154",
+  "sha256": "1c0d8793e3235184fb8e7f1ffb938ff2e822696ec3adcce18fca384bf2e1bb42",
+  "builtAt": "2026-11-07T01:08:10.081Z"
 }

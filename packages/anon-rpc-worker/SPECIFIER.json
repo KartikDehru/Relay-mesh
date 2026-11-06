@@ -3,12 +3,14 @@
   "chain": "sepolia",
   "chainId": 11155111,
   "specifierAddress": "0x005d62b2fB2BbfB05d268990DA6c328F80de28D1",
-  "workerHash": "0xe42b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca",
+  "workerHash": "0xf985be89550e8fea776ff7a88a470b114a0420bdc3a204c1a21239dc117a2154",
   "resolvers": [
-    "https://raw.githubusercontent.com/KartikDehru/Relay-mesh/keccak/e4/2b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca"
+    "https://raw.githubusercontent.com/KartikDehru/Relay-mesh/keccak/f9/85be89550e8fea776ff7a88a470b114a0420bdc3a204c1a21239dc117a2154"
   ],
   "deployTx": "0x356ed8d5e2a202533d43d1bc808c66cb9b90d4a63b826afb37ce74a286e7a6ed",
+  "updateTx": "0x91a92c4e43eb4f057a2be85a34440529e1f12ccd4cd09e42fc0a9a35a12088e0",
   "deployer": "0xD1411ee0c50F5B1585c481F7e75bC42DC5c20A2A",
   "etherscan": "https://sepolia.etherscan.io/address/0x005d62b2fB2BbfB05d268990DA6c328F80de28D1",
-  "deployedAt": "2026-11-07T00:24:50.000Z"
+  "deployedAt": "2026-11-07T00:24:50.000Z",
+  "updatedAt": "2026-11-07T01:08:30.000Z"
 }

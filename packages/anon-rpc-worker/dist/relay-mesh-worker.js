@@ -3168,22 +3168,98 @@
     return bytesToBase64(concatBytes2(ephemeralPub, nonce, ciphertext));
   }
 
+  // ../crypto/dist/pad.js
+  var PAD_BUCKETS = [1024, 4096, 16384, 65536];
+  function nextBucketSize(byteLength) {
+    for (const b of PAD_BUCKETS) {
+      if (byteLength <= b)
+        return b;
+    }
+    throw new Error(`Payload ${byteLength} bytes exceeds max pad bucket ${PAD_BUCKETS[PAD_BUCKETS.length - 1]}`);
+  }
+  function utf8Len(s) {
+    return new TextEncoder().encode(s).length;
+  }
+  function padJsonObject(obj) {
+    const withEmpty = { ...obj, _pad: "" };
+    const emptyLen = utf8Len(JSON.stringify(withEmpty));
+    const target = nextBucketSize(emptyLen);
+    const need = target - emptyLen;
+    const raw = bytesToBase64(randomBytes(Math.max(1, Math.ceil(need * 0.75))));
+    const _pad = (raw + "A".repeat(Math.max(0, need))).slice(0, need);
+    const padded = { ...obj, _pad };
+    const len = utf8Len(JSON.stringify(padded));
+    if (len !== target) {
+      const delta = target - len;
+      const adjusted = (_pad + "B".repeat(Math.max(0, delta))).slice(0, Math.max(0, _pad.length + delta));
+      const again = { ...obj, _pad: adjusted };
+      if (utf8Len(JSON.stringify(again)) !== target) {
+        throw new Error(`padJsonObject failed to hit bucket ${target} (got ${utf8Len(JSON.stringify(again))})`);
+      }
+      return again;
+    }
+    return padded;
+  }
+  function stripBinaryPadding(padded) {
+    if (padded.length < 4)
+      throw new Error("Padded blob too short");
+    const view = new DataView(padded.buffer, padded.byteOffset, padded.byteLength);
+    const realLen = view.getUint32(0, true);
+    if (realLen < 0 || 4 + realLen > padded.length) {
+      throw new Error("Invalid pad length");
+    }
+    return padded.subarray(4, 4 + realLen);
+  }
+
+  // ../crypto/dist/reply.js
+  var NONCE_LEN2 = 24;
+  var KEY_LEN2 = 32;
+  function openReply(replyKeyB64, payloadB64) {
+    const key = base64ToBytes(replyKeyB64);
+    if (key.length !== KEY_LEN2) {
+      throw new Error(`replyKey must be ${KEY_LEN2} bytes`);
+    }
+    const blob = stripBinaryPadding(base64ToBytes(payloadB64));
+    if (blob.length < NONCE_LEN2 + 16) {
+      throw new Error("Reply payload too short");
+    }
+    const nonce = blob.subarray(0, NONCE_LEN2);
+    const ciphertext = blob.subarray(NONCE_LEN2);
+    const plaintext = xchacha20poly1305(key, nonce).decrypt(ciphertext);
+    const parsed = JSON.parse(new TextDecoder().decode(plaintext));
+    if (typeof parsed?.status !== "number" || typeof parsed?.body !== "string") {
+      throw new Error("Invalid reply envelope");
+    }
+    return parsed;
+  }
+  function generateReplyKey() {
+    return bytesToBase64(randomBytes(KEY_LEN2));
+  }
+
   // ../crypto/dist/onion.js
-  function buildOnion(rpcPayload, hops, rpcTargetUrl) {
-    const [entry, middle, exit] = hops;
-    const exitLayer = sealLayer(exit.publicKey, {
+  function buildOnion(rpcPayload, hops, rpcTargetUrl, options = {}) {
+    if (hops.length < 3) {
+      throw new Error("circuit must contain at least 3 hops");
+    }
+    const replyKey = generateReplyKey();
+    const demoKey = options.demoKey;
+    const exit = hops[hops.length - 1];
+    let blob = sealLayer(exit.publicKey, padJsonObject({
       rpcTargetUrl,
-      rpcPayload
-    });
-    const middleLayer = sealLayer(middle.publicKey, {
-      nextHopUrl: exit.url,
-      innerBlob: exitLayer
-    });
-    const entryLayer = sealLayer(entry.publicKey, {
-      nextHopUrl: middle.url,
-      innerBlob: middleLayer
-    });
-    return entryLayer;
+      rpcPayload,
+      replyKey,
+      ...demoKey ? { demoKey } : {}
+    }));
+    for (let i = hops.length - 2; i >= 0; i--) {
+      const hop = hops[i];
+      const next = hops[i + 1];
+      blob = sealLayer(hop.publicKey, {
+        nextHopUrl: next.url.replace(/\/$/, ""),
+        innerBlob: blob,
+        ...demoKey ? { demoKey } : {}
+      });
+    }
+    return { onion: blob, replyKey, ...demoKey ? { demoKey } : {} };
   }
 
   // src/default-circuit.ts
@@ -3264,7 +3340,7 @@
         rpcPayload = { rawBase64: bytesToBase642(bodyBytes) };
       }
     }
-    const onion = buildOnion(
+    const { onion, replyKey } = buildOnion(
       rpcPayload,
       hops.map((h) => ({ url: h.url, publicKey: h.publicKey })),
       url
@@ -3275,13 +3351,44 @@
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ payload: onion })
     });
+    const wireText = await resp.text();
+    if (!resp.ok) {
+      return {
+        status: resp.status,
+        headers: [["content-type", "application/json"]],
+        body: new TextEncoder().encode(wireText),
+        url: resp.url
+      };
+    }
+    let wire;
+    try {
+      wire = JSON.parse(wireText);
+    } catch {
+      return {
+        status: 502,
+        headers: [["content-type", "text/plain"]],
+        body: new TextEncoder().encode("relay mesh returned non-JSON"),
+        url: entryUrl
+      };
+    }
+    if (typeof wire.payload !== "string") {
+      return {
+        status: 502,
+        headers: [["content-type", "text/plain"]],
+        body: new TextEncoder().encode("relay mesh missing sealed payload"),
+        url: entryUrl
+      };
+    }
+    const envelope = openReply(replyKey, wire.payload);
     const headers = [];
-    resp.headers.forEach((v, k) => headers.push([k, v]));
+    if (envelope.contentType) {
+      headers.push(["content-type", envelope.contentType]);
+    }
     return {
-      status: resp.status,
+      status: envelope.status,
       headers,
-      body: new Uint8Array(await resp.arrayBuffer()),
-      url: resp.url
+      body: new TextEncoder().encode(envelope.body),
+      url
     };
   }
   function pickCircuit(cfg, init) {
