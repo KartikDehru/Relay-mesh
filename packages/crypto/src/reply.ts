@@ -5,6 +5,7 @@ import {
   bytesToBase64,
   concatBytes,
 } from "./encoding.js";
+import { padBinaryToBucket, stripBinaryPadding } from "./pad.js";
 
 const NONCE_LEN = 24;
 const KEY_LEN = 32;
@@ -28,7 +29,10 @@ export function sealReply(replyKeyB64: string, envelope: ReplyEnvelope): string 
   const nonce = randomBytes(NONCE_LEN);
   const plaintext = new TextEncoder().encode(JSON.stringify(envelope));
   const ciphertext = xchacha20poly1305(key, nonce).encrypt(plaintext);
-  return bytesToBase64(concatBytes(nonce, ciphertext));
+  // Bucket-pad the sealed bytes so observers cannot infer response size.
+  return bytesToBase64(
+    padBinaryToBucket(concatBytes(nonce, ciphertext)),
+  );
 }
 
 /**
@@ -39,7 +43,7 @@ export function openReply(replyKeyB64: string, payloadB64: string): ReplyEnvelop
   if (key.length !== KEY_LEN) {
     throw new Error(`replyKey must be ${KEY_LEN} bytes`);
   }
-  const blob = base64ToBytes(payloadB64);
+  const blob = stripBinaryPadding(base64ToBytes(payloadB64));
   if (blob.length < NONCE_LEN + 16) {
     throw new Error("Reply payload too short");
   }

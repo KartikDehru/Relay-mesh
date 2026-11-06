@@ -1,5 +1,6 @@
 import { sealLayer } from "./seal.js";
 import { generateReplyKey } from "./reply.js";
+import { padJsonObject } from "./pad.js";
 
 /** A relay hop addressable by URL + public key (base64). */
 export type RelayHop = {
@@ -29,11 +30,15 @@ export function buildOnion(
   const [entry, middle, exit] = hops;
   const replyKey = generateReplyKey();
 
-  const exitLayer = sealLayer(exit.publicKey, {
-    rpcTargetUrl,
-    rpcPayload,
-    replyKey,
-  });
+  // Bucket-pad exit plaintext so ciphertext size does not leak method/params size.
+  const exitLayer = sealLayer(
+    exit.publicKey,
+    padJsonObject({
+      rpcTargetUrl,
+      rpcPayload,
+      replyKey,
+    }),
+  );
 
   const middleLayer = sealLayer(middle.publicKey, {
     nextHopUrl: exit.url,

@@ -7,6 +7,11 @@ import {
   sealReply,
   openReply,
   generateReplyKey,
+  PAD_BUCKETS,
+  padBinaryToBucket,
+  stripBinaryPadding,
+  padJsonObject,
+  stripJsonPadding,
 } from "../src/index.js";
 
 describe("sealLayer / openLayer", () => {
@@ -105,18 +110,40 @@ describe("3-layer nested onion", () => {
     // Hop1 cannot peel hop2's layer
     expect(() => openLayer(hop1.privateKey, layer1.innerBlob)).toThrow();
 
-    // Hop3 (exit) peels innermost — plaintext RPC + replyKey
-    const layer3 = openLayer<{
+    // Hop3 (exit) peels innermost — plaintext RPC + replyKey (+ optional _pad)
+    const layer3raw = openLayer<{
       rpcTargetUrl: string;
       rpcPayload: unknown;
       replyKey: string;
+      _pad?: string;
     }>(hop3.privateKey, layer2.innerBlob);
+    expect(typeof layer3raw._pad).toBe("string");
+    const layer3 = stripJsonPadding(layer3raw);
     expect(layer3.rpcTargetUrl).toBe(rpcTargetUrl);
     expect(layer3.rpcPayload).toEqual(rpcPayload);
     expect(layer3.replyKey).toBe(replyKey);
 
     // Middle cannot see plaintext
     expect(() => openLayer(hop2.privateKey, layer2.innerBlob)).toThrow();
+  });
+
+  it("pads exit plaintext and replies to fixed buckets only", () => {
+    const padded = padJsonObject({ a: 1, b: "x" });
+    const len = new TextEncoder().encode(JSON.stringify(padded)).length;
+    expect(PAD_BUCKETS).toContain(len);
+    expect(stripJsonPadding(padded)).toEqual({ a: 1, b: "x" });
+
+    const replyKey = generateReplyKey();
+    const sealed = sealReply(replyKey, {
+      status: 200,
+      body: '{"jsonrpc":"2.0","id":1,"result":"0x1"}',
+    });
+    const sealedBytes = Buffer.from(sealed, "base64");
+    expect(PAD_BUCKETS).toContain(sealedBytes.length);
+
+    const small = padBinaryToBucket(new Uint8Array([1, 2, 3]));
+    expect(PAD_BUCKETS).toContain(small.length);
+    expect(Array.from(stripBinaryPadding(small))).toEqual([1, 2, 3]);
   });
 
   it("encrypted reply is not valid JSON-RPC plaintext", () => {

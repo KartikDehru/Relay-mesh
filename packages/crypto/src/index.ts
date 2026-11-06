@@ -13,4 +13,14 @@ export {
   generateReplyKey,
 } from "./reply.js";
 export type { ReplyEnvelope } from "./reply.js";
+export {
+  PAD_BUCKETS,
+  nextBucketSize,
+  padJsonObject,
+  stripJsonPadding,
+  padBinaryToBucket,
+  stripBinaryPadding,
+  padPayloadB64,
+  stripPayloadB64,
+} from "./pad.js";
 export { bytesToBase64, base64ToBytes } from "./encoding.js";

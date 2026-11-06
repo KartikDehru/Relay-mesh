@@ -9,6 +9,7 @@ import {
   publicKeyFingerprint,
   publicKeyFromPrivate,
   sealReply,
+  stripJsonPadding,
 } from "@relay-mesh/crypto";
 import { normalizeHopUrl, type RelayConfig } from "./config.js";
 
@@ -21,6 +22,7 @@ type ExitLayer = {
   rpcTargetUrl: string;
   rpcPayload: unknown;
   replyKey: string;
+  _pad?: string;
 };
 
 function sleep(ms: number): Promise<void> {
@@ -180,7 +182,10 @@ export function createApp(cfg: RelayConfig): Application {
       const layer = openLayer<unknown>(cfg.privateKey, payload);
 
       if (isExitLayer(layer)) {
-        await handleExit(cfg, req, res, layer, bytesIn, started);
+        const exitLayer = stripJsonPadding(
+          layer as ExitLayer & { _pad?: string },
+        ) as ExitLayer;
+        await handleExit(cfg, req, res, exitLayer, bytesIn, started);
         return;
       }
 
