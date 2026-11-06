@@ -73,9 +73,6 @@ importers:
 
   packages/demo:
     dependencies:
-      '@relay-mesh/client':
-        specifier: workspace:*
-        version: link:../client
       '@relay-mesh/crypto':
         specifier: workspace:*
         version: link:../crypto

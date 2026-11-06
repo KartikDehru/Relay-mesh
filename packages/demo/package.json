@@ -10,7 +10,6 @@
     "test": "echo \"demo has no unit tests\""
   },
   "dependencies": {
-    "@relay-mesh/client": "workspace:*",
     "@relay-mesh/crypto": "workspace:*",
     "next": "^15.1.3",
     "react": "^19.0.0",

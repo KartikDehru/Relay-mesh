@@ -35,7 +35,7 @@ export const metadata: Metadata = {
       "3-hop onion-routed relay for private JSON-RPC. Verify hops, sealed observations, and the Sepolia worker pin.",
     url: siteUrl,
     siteName: "Relay Mesh",
-    images: [{ url: "/og.svg", width: 1200, height: 630, alt: "Relay Mesh" }],
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Relay Mesh" }],
     type: "website",
   },
   twitter: {
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
     title: "Relay Mesh — private JSON-RPC",
     description:
       "3-hop onion-routed relay for private JSON-RPC. No single hop sees both your IP and your query.",
-    images: ["/og.svg"],
+    images: ["/og.png"],
   },
 };
 

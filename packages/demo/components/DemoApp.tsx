@@ -35,6 +35,7 @@ const REPO = "https://github.com/KartikDehru/Relay-mesh";
 export function DemoApp() {
   const [registry, setRegistry] = useState<CircuitRegistry | null>(null);
   const [health, setHealth] = useState<HopHealthStatus[] | null>(null);
+  const [registryReady, setRegistryReady] = useState(false);
   const [mode, setMode] = useState<Mode>("fixed");
   const [method, setMethod] = useState<RpcMethod>("eth_blockNumber");
   const [busy, setBusy] = useState(false);
@@ -50,11 +51,13 @@ export function DemoApp() {
         const reg = await loadRegistry();
         if (cancelled) return;
         setRegistry(reg);
+        setRegistryReady(true);
         const statuses = await probeHopHealth(reg);
         if (!cancelled) setHealth(statuses);
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e));
+          setRegistryReady(true);
         }
       }
     })();
@@ -68,7 +71,7 @@ export function DemoApp() {
     [registry],
   );
 
-  const loading = !registry;
+  const loading = !registryReady;
 
   async function run() {
     if (!registry || busy) return;
@@ -232,6 +235,7 @@ export function DemoApp() {
         busy={busy}
       />
 
+
       {error && (
         <div style={styles.error} role="alert">
           {error}
@@ -357,14 +361,15 @@ function CircuitStrip({
   const roles = ["entry", "middle", "exit"];
 
   return (
-    <div style={styles.circuit}>
+    <div style={styles.circuit} className="circuit-strip">
       {hopIds.map((id, i) => {
         const node = map.get(id);
         const active = busy && activeHop === i;
         return (
-          <div key={id} style={styles.hopWrap}>
+          <div key={id} style={styles.hopWrap} className="circuit-hop">
             {i > 0 && (
               <div
+                className="circuit-connector"
                 style={{
                   ...styles.connector,
                   opacity: busy && activeHop >= i ? 1 : 0.45,
@@ -503,8 +508,17 @@ function BeforeAfter({
                   mono
                 />
                 <p style={styles.note}>
-                  Sealed hop observations unavailable until hops run with
-                  DEMO_LOGGING=true.
+                  Sees your IP and ciphertext only — not the RPC method or params.
+                </p>
+              </div>
+              <div style={styles.hopSight}>
+                <h4 style={styles.h4}>{labels[1]}</h4>
+                <Field
+                  label="Peer"
+                  value={`${capture.hopIds[0]} → ${capture.hopIds[2]} (ciphertext only)`}
+                />
+                <p style={styles.note}>
+                  Sees neither your IP nor the plaintext query.
                 </p>
               </div>
               <div style={styles.hopSight}>
@@ -514,6 +528,11 @@ function BeforeAfter({
                   value={JSON.stringify(capture.rpcPayload, null, 2)}
                   mono
                 />
+                <p style={styles.note}>
+                  Sees the query, never your original client IP. Sealed
+                  per-hop records appear here after hops redeploy with
+                  DEMO_LOGGING=true.
+                </p>
               </div>
             </>
           )}
@@ -856,7 +875,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   healthStrip: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))",
     gap: 12,
     marginBottom: 28,
   },
@@ -1007,7 +1026,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   grid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
     gap: 18,
   },
   panel: {
@@ -1126,6 +1145,9 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--ink-soft)",
     lineHeight: 1.7,
     fontSize: 14,
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
+    maxWidth: "100%",
   },
   verifyCmd: {
     marginTop: 6,
@@ -1136,6 +1158,9 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 10,
     padding: "8px 10px",
     wordBreak: "break-word",
+    overflowWrap: "anywhere",
+    whiteSpace: "pre-wrap",
+    maxWidth: "100%",
   },
   footer: {
     marginTop: 56,

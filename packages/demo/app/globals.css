@@ -140,3 +140,23 @@ select {
 .anim-rise-delay-3 {
   animation: rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.21s both;
 }
+
+@media (max-width: 480px) {
+  .circuit-strip {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+
+  .circuit-strip .circuit-hop {
+    width: 100%;
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .circuit-strip .circuit-connector {
+    width: 3px !important;
+    height: 18px !important;
+    margin: 0 auto 6px !important;
+  }
+}
