@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "description": "Public circuit registry for Relay Mesh. Private keys are NEVER stored here — only on each hop's independent Railway account as RELAY_PRIVATE_KEY.",
+  "claim": "Each relay node is deployed and billed under an independent Railway account.",
+  "rpcTargetUrl": "https://ethereum-sepolia-rpc.publicnode.com",
+  "rpcTargetNote": "Exit upstream Ethereum RPC (not Anon-RPC itself). Anon-RPC is the worker/harness interface; Relay Mesh is the multi-hop anonymizing network. See README Claims & Sources. Live demo: https://ethereum.github.io/anon-rpc/demo/",
+  "fixedCircuit": [
+    "hop1",
+    "hop2",
+    "hop3"
+  ],
+  "fixedCircuitRoles": {
+    "hop1": "entry",
+    "hop2": "middle",
+    "hop3": "exit"
+  },
+  "spareNodes": [
+    "hop4",
+    "hop5"
+  ],
+  "nodes": [
+    {
+      "id": "hop1",
+      "fingerprint": "f2a103400d6d054b",
+      "publicKey": "UApkmgQb2nVk9wGdIA2bXH9ZCCLrgYeYkYI7sfhJVFo=",
+      "url": "https://hop1-production-70b7.up.railway.app",
+      "railwayAccount": "independent-account-1",
+      "roleHint": "entry"
+    },
+    {
+      "id": "hop2",
+      "fingerprint": "4cf1937be1626760",
+      "publicKey": "tBqgL+/QM8emvRev3lxYBgZ77udk9t9Ap2nUkH70JSI=",
+      "url": "https://hop2-production.up.railway.app",
+      "railwayAccount": "independent-account-2",
+      "roleHint": "middle"
+    },
+    {
+      "id": "hop3",
+      "fingerprint": "8dfc22a713d9d6ba",
+      "publicKey": "c6B9oNUE+Z0G3vDXAro/m22rgGXXXtj2dO7K0ou21gU=",
+      "url": "https://hop3-production.up.railway.app",
+      "railwayAccount": "independent-account-3",
+      "roleHint": "exit"
+    },
+    {
+      "id": "hop4",
+      "fingerprint": "2a619e3d7b6ec6c1",
+      "publicKey": "atBZQj1UfBeAYZmd1j37ZM+L87rGgmQ0569F9/8/Kwc=",
+      "url": "https://hop4-production.up.railway.app",
+      "railwayAccount": "independent-account-4",
+      "roleHint": "spare"
+    },
+    {
+      "id": "hop5",
+      "fingerprint": "a077e88d3d1669cb",
+      "publicKey": "olSPZOEuoSpD0euyfEinStSg6NfCkT1X6tDfAsu3tG4=",
+      "url": "",
+      "railwayAccount": "independent-account-5",
+      "roleHint": "spare"
+    }
+  ],
+  "notes": "hop1-hop4 deployed on independent Railway accounts; hop5 pending. Fixed circuit uses hop1→hop2→hop3."
+}

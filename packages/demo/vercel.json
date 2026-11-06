@@ -1,0 +1,5 @@
+{
+  "framework": "nextjs",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "buildCommand": "cd ../.. && pnpm --filter @relay-mesh/crypto build && pnpm --filter @relay-mesh/client build && pnpm --filter @relay-mesh/demo build"
+}

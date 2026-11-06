@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="512" height="512">
+  <title>Relay Mesh</title>
+  <g stroke="#FFFFFF" stroke-width="1.4" stroke-linejoin="round">
+    <polygon points="32,4 21,18 32,32" fill="#8E7CFF"/>
+    <polygon points="21,18 10,32 32,32" fill="#FF6B8A"/>
+    <polygon points="32,4 43,18 32,32" fill="#2E8BFF"/>
+    <polygon points="43,18 54,32 32,32" fill="#FFB340"/>
+    <polygon points="10,32 21,46 32,32" fill="#2E8BFF"/>
+    <polygon points="21,46 32,60 32,32" fill="#34C78F"/>
+    <polygon points="54,32 43,46 32,32" fill="#8E7CFF"/>
+    <polygon points="43,46 32,60 32,32" fill="#FF6B8A"/>
+  </g>
+  <polyline points="21,46 32,32 43,18" fill="none" stroke="#1D1D1F" stroke-width="1.4" stroke-linecap="round"/>
+  <circle cx="21" cy="46" r="2.4" fill="#1D1D1F"/>
+  <circle cx="32" cy="32" r="3.4" fill="#1D1D1F"/>
+  <circle cx="43" cy="18" r="2.4" fill="#1D1D1F"/>
+</svg>

@@ -1,0 +1,131 @@
+:root {
+  --bg: #f3f6fb;
+  --bg-soft: #eef2f8;
+  --surface: rgba(255, 255, 255, 0.78);
+  --surface-solid: #ffffff;
+  --ink: #12141a;
+  --ink-soft: #2a2f3a;
+  --muted: #5c6575;
+  --line: rgba(18, 20, 26, 0.08);
+  --line-strong: rgba(18, 20, 26, 0.14);
+  --violet: #6b5cff;
+  --blue: #1f7dff;
+  --pink: #ef5f7e;
+  --orange: #ef9f2e;
+  --green: #1fa971;
+  --danger: #e23d4f;
+  --ok: #1fa971;
+  --shadow: 0 18px 50px rgba(28, 42, 78, 0.08);
+  --shadow-sm: 0 8px 24px rgba(28, 42, 78, 0.06);
+  --font-display: "Syne", "Avenir Next", sans-serif;
+  --font-body: "Sora", "Avenir Next", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background:
+    radial-gradient(ellipse 70% 45% at 8% -5%, rgba(107, 92, 255, 0.16), transparent 55%),
+    radial-gradient(ellipse 55% 40% at 92% 5%, rgba(31, 125, 255, 0.14), transparent 50%),
+    radial-gradient(ellipse 50% 35% at 70% 105%, rgba(239, 95, 126, 0.1), transparent 55%),
+    linear-gradient(180deg, #f7f9fc 0%, #eef3f9 100%);
+  background-attachment: fixed;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.45;
+  background-image: radial-gradient(rgba(18, 20, 26, 0.05) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 20%, black, transparent);
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(107, 92, 255, 0.22);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-line {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scaleX(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes hop-glow {
+  0%,
+  100% {
+    box-shadow: var(--shadow-sm);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(107, 92, 255, 0.12), var(--shadow);
+  }
+}
+
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.anim-rise {
+  animation: rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.anim-rise-delay-1 {
+  animation: rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.07s both;
+}
+
+.anim-rise-delay-2 {
+  animation: rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.14s both;
+}
+
+.anim-rise-delay-3 {
+  animation: rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.21s both;
+}

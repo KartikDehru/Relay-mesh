@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Relay Mesh</title>
+  <g stroke="#FFFFFF" stroke-width="2.5" stroke-linejoin="round">
+    <polygon points="32,4 10,32 32,32" fill="#8E7CFF"/>
+    <polygon points="32,4 54,32 32,32" fill="#2E8BFF"/>
+    <polygon points="10,32 32,60 32,32" fill="#34C78F"/>
+    <polygon points="54,32 32,60 32,32" fill="#FF6B8A"/>
+  </g>
+  <circle cx="32" cy="32" r="5" fill="#1D1D1F"/>
+</svg>

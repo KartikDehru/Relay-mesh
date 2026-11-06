@@ -1,0 +1,132 @@
+import { buildOnion, type RelayHop } from "@relay-mesh/crypto";
+import type { CircuitRegistry, RegistryNode, RpcPayload } from "./types";
+
+export async function loadRegistry(): Promise<CircuitRegistry> {
+  const res = await fetch("/circuit-registry.json", { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to load circuit-registry.json");
+  return (await res.json()) as CircuitRegistry;
+}
+
+export function deployedNodes(registry: CircuitRegistry): RegistryNode[] {
+  return registry.nodes.filter((n) => Boolean(n.url));
+}
+
+export function pickFixedCircuit(registry: CircuitRegistry): {
+  hops: [RelayHop, RelayHop, RelayHop];
+  hopIds: [string, string, string];
+  nodes: [RegistryNode, RegistryNode, RegistryNode];
+} {
+  const map = new Map(registry.nodes.map((n) => [n.id, n]));
+  const ids = registry.fixedCircuit as [string, string, string];
+  const nodes = ids.map((id) => {
+    const n = map.get(id);
+    if (!n?.url) throw new Error(`Fixed circuit hop ${id} is not deployed`);
+    return n;
+  }) as [RegistryNode, RegistryNode, RegistryNode];
+  return {
+    hopIds: ids,
+    nodes,
+    hops: nodes.map((n) => ({
+      url: n.url.replace(/\/$/, ""),
+      publicKey: n.publicKey,
+    })) as [RelayHop, RelayHop, RelayHop],
+  };
+}
+
+export function pickRandomCircuit(registry: CircuitRegistry): {
+  hops: [RelayHop, RelayHop, RelayHop];
+  hopIds: [string, string, string];
+  nodes: [RegistryNode, RegistryNode, RegistryNode];
+} {
+  const pool = [...deployedNodes(registry)];
+  if (pool.length < 3) throw new Error("Need at least 3 deployed hops");
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j]!, pool[i]!];
+  }
+  const nodes = pool.slice(0, 3) as [
+    RegistryNode,
+    RegistryNode,
+    RegistryNode,
+  ];
+  return {
+    hopIds: nodes.map((n) => n.id) as [string, string, string],
+    nodes,
+    hops: nodes.map((n) => ({
+      url: n.url.replace(/\/$/, ""),
+      publicKey: n.publicKey,
+    })) as [RelayHop, RelayHop, RelayHop],
+  };
+}
+
+export async function fetchClientIp(): Promise<string> {
+  try {
+    const res = await fetch("https://api.ipify.org?format=json");
+    if (!res.ok) return "unknown";
+    const data = (await res.json()) as { ip?: string };
+    return data.ip ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+export function defaultRpcPayload(): RpcPayload {
+  return {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "eth_blockNumber",
+    params: [],
+  };
+}
+
+export async function sendDirect(
+  rpcTargetUrl: string,
+  rpcPayload: RpcPayload,
+): Promise<{ result: unknown; ms: number }> {
+  const t0 = performance.now();
+  const res = await fetch(rpcTargetUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(rpcPayload),
+  });
+  const text = await res.text();
+  const ms = Math.round(performance.now() - t0);
+  let result: unknown = text;
+  try {
+    result = JSON.parse(text);
+  } catch {
+    /* keep text */
+  }
+  if (!res.ok) throw new Error(`Direct RPC HTTP ${res.status}: ${text.slice(0, 200)}`);
+  return { result, ms };
+}
+
+export async function sendViaMeshBrowser(
+  rpcPayload: RpcPayload,
+  hops: [RelayHop, RelayHop, RelayHop],
+  rpcTargetUrl: string,
+): Promise<{ result: unknown; ms: number; onion: string }> {
+  const onion = buildOnion(rpcPayload, hops, rpcTargetUrl);
+  const entryUrl = hops[0].url.replace(/\/$/, "") + "/relay";
+  const t0 = performance.now();
+  const res = await fetch(entryUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ payload: onion }),
+  });
+  const text = await res.text();
+  const ms = Math.round(performance.now() - t0);
+  if (!res.ok) throw new Error(`Mesh HTTP ${res.status}: ${text.slice(0, 240)}`);
+  let result: unknown = text;
+  try {
+    result = JSON.parse(text);
+  } catch {
+    /* keep text */
+  }
+  return { result, ms, onion };
+}
+
+export function cipherPreview(onionB64: string, max = 96): string {
+  if (onionB64.length <= max) return onionB64;
+  return `${onionB64.slice(0, max / 2)}…${onionB64.slice(-max / 2)}`;
+}
