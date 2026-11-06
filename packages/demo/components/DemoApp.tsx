@@ -193,7 +193,7 @@ export function DemoApp() {
           operator can still see both identity and content. Relay Mesh is the
           multi-hop network that plugs that gap.{" "}
           <a
-            href="https://github.com/KartikDehru/Relay-mesh#claims--sources"
+            href="https://github.com/KartikDehru/Relay-mesh#why-this-network"
             style={styles.footerLink}
             target="_blank"
             rel="noopener noreferrer"

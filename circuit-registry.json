@@ -60,5 +60,5 @@
       "roleHint": "spare"
     }
   ],
-  "notes": "hop1-hop4 deployed on independent Railway accounts; hop5 pending. Fixed circuit uses hop1→hop2→hop3."
+  "notes": "hop1–hop4 live on independent Railway accounts; hop5 reserved. Fixed circuit: hop1→hop2→hop3."
 }

@@ -1,87 +1,53 @@
 # Relay Mesh
 
-**3-hop onion-routed relay network for private JSON-RPC calls.**
+Relay Mesh is a **3-hop onion-routed relay network** for private JSON-RPC calls. No single relay ever sees both the client's network identity **and** the plaintext query.
 
-No single relay node ever sees both the original client's network identity **and** the plaintext RPC query. Request-scoped onion encryption (x25519 + XChaCha20-Poly1305) sits in front of an RPC endpoint.
+- **Clients** build the onion in-browser or in Node (`x25519` + `XChaCha20-Poly1305`) and talk only to the entry hop.
+- **Relays** peel one layer and forward content-addressed ciphertext; the exit sees the RPC but not the original client IP.
+- **Operators** run hops under **independent Railway accounts** so billing and control are not a single project login.
+- **Anon-RPC hosts** can pin the published worker by hash via an on-chain specifier.
 
-**Decentralization claim:** each relay node is deployed and billed under an **independent Railway account**.
+## Live
 
-## Guarantee (one paragraph)
+| | |
+|---|---|
+| Hop 1 (entry) | https://hop1-production-70b7.up.railway.app |
+| Hop 2 (middle) | https://hop2-production.up.railway.app |
+| Hop 3 (exit) | https://hop3-production.up.railway.app |
+| Hop 4 (spare) | https://hop4-production.up.railway.app |
+| Circuit registry | [`circuit-registry.json`](./circuit-registry.json) |
+| Demo dashboard | `pnpm dev:demo` → http://localhost:3000 |
+| Anon-RPC reference demo | https://ethereum.github.io/anon-rpc/demo/ |
+| Worker resolver (raw bytes) | [keccak path](https://raw.githubusercontent.com/KartikDehru/Relay-mesh/keccak/e4/2b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca) |
 
-Relay Mesh wraps each JSON-RPC request in a nested sealed box so the entry hop sees only your IP and ciphertext, middle hops see only hop-to-hop ciphertext, and the exit hop sees the plaintext query without your original IP — then the response bubbles back unchanged. Encryption and the call to the entry hop happen in the browser; the Vercel demo never proxies relay traffic.
+Health check any hop: `GET /health` → `{ role, fingerprint, publicKey }`.
 
-## Architecture
+Fixed MVP circuit: **hop1 → hop2 → hop3**. Hop 4 is a live spare; hop 5 is reserved. The demo can optionally pick a random 3-of-N circuit.
 
-```
-Browser client
-   │  builds onion locally (@noble x25519 + XChaCha20-Poly1305)
-   ▼
-Hop1 entry ──encrypted blob──► Hop2 middle ──encrypted blob──► Hop3 exit ──JSON-RPC──► Target RPC
-   ▲                                                                                      │
-   └──────────────────────── response returns up the same chain ──────────────────────────┘
-```
+## On-chain (Sepolia)
 
-Fixed MVP circuit: **hop1 → hop2 → hop3**. hop4 is a live spare (hop5 pending). Optional random 3-of-N selection is in the demo dashboard.
+| | |
+|---|---|
+| Worker keccak256 | `0xe42b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca` |
+| Specifier | [`0x005d62b2fB2BbfB05d268990DA6c328F80de28D1`](https://sepolia.etherscan.io/address/0x005d62b2fB2BbfB05d268990DA6c328F80de28D1) |
+| Deploy tx | [`0x356ed8d5…e7a6ed`](https://sepolia.etherscan.io/tx/0x356ed8d5e2a202533d43d1bc808c66cb9b90d4a63b826afb37ce74a286e7a6ed) |
+| Metadata | [`packages/anon-rpc-worker/SPECIFIER.json`](./packages/anon-rpc-worker/SPECIFIER.json) |
 
-## Live hops (independent Railway accounts)
+Harnesses MUST reject any bytes whose `keccak256` does not equal `workerHash()`. Resolver URLs are advisory only.
 
-| Hop | Role | URL |
-|-----|------|-----|
-| hop1 | entry | https://hop1-production-70b7.up.railway.app |
-| hop2 | middle | https://hop2-production.up.railway.app |
-| hop3 | exit | https://hop3-production.up.railway.app |
-| hop4 | spare | https://hop4-production.up.railway.app |
-| hop5 | spare | _pending_ |
+Relay Mesh is published as a worker bundle at
+`0xe42b4bace5f2d8ac8d2fcb993977146ead99c54f58233506ebfb66e6324c38ca`,
+resolvable via specifier contract
+[`0x005d62b2fB2BbfB05d268990DA6c328F80de28D1`](https://sepolia.etherscan.io/address/0x005d62b2fB2BbfB05d268990DA6c328F80de28D1)
+(Sepolia).
 
-Health: `GET /health` on each URL → `{ role, fingerprint, publicKey }`.
+## Why this network
 
-Public keys + URLs: [`circuit-registry.json`](./circuit-registry.json) (no private keys).
+Anon-RPC leaves the anonymizing network's topology unspecified and does not rule out a single operator seeing both identity and content. Relay Mesh is a concrete multi-hop network for that slot: nested sealed boxes, independent hop operators, and a hash-pinned worker that plugs into Anon-RPC's own interface.
 
-## Packages
+### Claims & Sources
 
-| Package | Role |
-|---------|------|
-| `@relay-mesh/crypto` | Onion seal/open (`@noble/curves` + `@noble/ciphers`) — Node **and** browser |
-| `@relay-mesh/relay-node` | HTTP hop (`POST /relay`, `GET /health`) |
-| `@relay-mesh/client` | Node client + registry helpers |
-| `@relay-mesh/demo` | Next.js before/after dashboard → **Vercel** |
-
-## Quick start
-
-```bash
-pnpm install
-pnpm test:crypto
-pnpm test:integration          # local 3-hop
-pnpm test:live                 # Railway hop1→hop2→hop3
-pnpm --filter @relay-mesh/demo dev   # demo at http://localhost:3000
-```
-
-## Demo dashboard (Phase 3)
-
-```bash
-pnpm --filter @relay-mesh/demo dev
-```
-
-Deploy `packages/demo` to Vercel (Root Directory = `packages/demo`, or monorepo install via `vercel.json`). The UI:
-
-1. Encrypts in-browser and POSTs to the entry hop (no Vercel API/Edge proxy).
-2. Shows **Direct call**: IP + plaintext query linked.
-3. Shows **Through Relay Mesh**: hop1 ciphertext vs hop3 plaintext without client IP.
-4. Optional stretch: random 3-of-N circuit picker.
-
-Mixing delay: set `MIX_DELAY_MS_MIN` / `MIX_DELAY_MS_MAX` on each Railway hop to blur timing correlation.
-
-Railway deploy details: [`DEPLOY.md`](./DEPLOY.md).
-
-## Claims & Sources
-
-Relay Mesh's core claim is: Anon-RPC's own specification leaves the anonymizing
-network's topology unspecified, and does not rule out a single operator seeing
-both the client's identity and the request content. Relay Mesh is a concrete
-multi-hop network built to provide that guarantee where the standard leaves it
-optional, implemented as a worker that plugs into Anon-RPC's own interface.
-
-This claim is based on the following, cited directly:
+Cited directly from the standard:
 
 - anon-rpc Specification, §1 (Overview) and §10 (KPS transport): the spec says a
   client "routes requests through an anonymity network" but never defines that
@@ -110,23 +76,84 @@ This claim is based on the following, cited directly:
   is honored "up to the worker" — the standard gives no guarantee here.
   https://ethereum.github.io/anon-rpc/
 
-- anon-rpc live demo (reference implementation referred to above):
+- anon-rpc live demo (reference implementation):
   https://ethereum.github.io/anon-rpc/demo/
 
 In short: nothing in the standard requires that no single party sees both the
 client's identity and the query content — that property depends entirely on
 which network is plugged in. Relay Mesh is built to be that network.
 
-## Limitations
+## How it works
 
-1. **Operator set** — hops run on independent Railway *accounts*, but still the same hackathon team. Real decentralization needs unaffiliated operators.
-2. **Adversary model** — protects against a party who sees a *subset* of hops. A global passive adversary watching every hop at once can still correlate traffic.
-3. **Exit upstream** — exit hops currently forward to a public Ethereum RPC (`ethereum-sepolia-rpc.publicnode.com` / configurable). Anon-RPC itself is the worker/harness interface Relay Mesh plugs into — not a single RPC URL. Publishing a hash-pinned anon-rpc worker bundle + specifier contract is the next integration step.
-4. **Browser→raw RPC CORS** — some public RPCs block browser `fetch`; the mesh entry hop allows CORS so the private path still works from the demo.
+```
+Browser / Node client
+   │  builds onion locally (@noble x25519 + XChaCha20-Poly1305)
+   ▼
+Hop1 entry ──encrypted blob──► Hop2 middle ──encrypted blob──► Hop3 exit ──JSON-RPC──► Target RPC
+   ▲                                                                                      │
+   └──────────────────────── response returns up the same chain ──────────────────────────┘
+```
 
-## AI disclosure
+1. The client seals the RPC body for exit, wraps that for middle, wraps again for entry.
+2. Entry sees client IP + ciphertext only; middle sees hop-to-hop ciphertext only.
+3. Exit opens the innermost box, forwards to the target RPC, and returns the response up the chain.
+4. Optional mix delay (`MIX_DELAY_MS_MIN` / `MIX_DELAY_MS_MAX`) blurs timing correlation.
+5. The Next.js demo encrypts in-browser and POSTs to entry — it never proxies relay traffic.
 
-AI-assisted development is documented in [`AI_USAGE.md`](./AI_USAGE.md) (ETHGlobal transparency requirement). Hackathon submission notes: [`docs/HACKATHON.md`](./docs/HACKATHON.md).
+## Repo
+
+| Path | What |
+|---|---|
+| [`packages/crypto`](./packages/crypto) | Onion seal/open (`@noble/curves` + `@noble/ciphers`) for Node and browser |
+| [`packages/relay-node`](./packages/relay-node) | HTTP hop (`POST /relay`, `GET /health`) |
+| [`packages/client`](./packages/client) | Node client + registry helpers + integration tests |
+| [`packages/demo`](./packages/demo) | Next.js before/after dashboard |
+| [`packages/anon-rpc-worker`](./packages/anon-rpc-worker) | Hash-pinned anon-rpc worker + `WorkerSpecifier` |
+| [`circuit-registry.json`](./circuit-registry.json) | Public keys + live hop URLs (no private keys) |
+| [`docs/`](./docs) | Deploy guide, hackathon notes, AI disclosure |
+| [`scripts/`](./scripts) | Hop deploy, registry, and health helpers |
+
+## Run it
+
+Needs Node ≥ 20 and [pnpm](https://pnpm.io) (via Corepack).
+
+```bash
+git clone https://github.com/KartikDehru/Relay-mesh.git
+cd Relay-mesh
+pnpm install
+pnpm test:crypto
+pnpm test:integration          # local 3-hop
+pnpm test:live                 # live Railway hop1→hop2→hop3
+pnpm check-hops
+pnpm dev:demo                  # http://localhost:3000
+```
+
+Build the anon-rpc worker bundle (prints keccak256):
+
+```bash
+pnpm --filter @relay-mesh/crypto build
+pnpm --filter @relay-mesh/anon-rpc-worker build
+```
+
+## Deploy
+
+- **Hops** — independent Railway accounts, Dockerfile at repo root. Step-by-step: [`docs/deploy.md`](./docs/deploy.md).
+- **Demo** — deploy `packages/demo` to Vercel (root directory `packages/demo`, or monorepo build via `packages/demo/vercel.json`).
+- **Worker bytes** — orphan `keccak` branch at content-addressed path; pin with `WorkerSpecifier` on Sepolia (see [`packages/anon-rpc-worker`](./packages/anon-rpc-worker)).
+
+Env templates: [`.env.example`](./.env.example). Secrets stay in platform stores or local `.keys/` (gitignored).
+
+## Current limitations
+
+1. **Operator set** — hops use independent Railway *accounts*, but operators can still be affiliated. Stronger decentralization needs unaffiliated operators.
+2. **Adversary model** — protects against a party who sees a *subset* of hops. A global passive adversary watching every hop can still attempt traffic correlation.
+3. **Exit upstream** — exits forward to a public Ethereum RPC (e.g. `ethereum-sepolia-rpc.publicnode.com`). Anon-RPC is the worker/harness interface; the exit RPC is separate.
+4. **Browser CORS** — some public RPCs block browser `fetch`; the mesh entry hop allows CORS so the private path works from the demo.
+5. **Hop 5** — reserved slot; not deployed yet.
+
+## Hackathon
+
+Built for ETHGlobal. First commit: [`40347e7`](https://github.com/KartikDehru/Relay-mesh/commit/40347e7). Submission checklist and links: [`docs/hackathon.md`](./docs/hackathon.md). AI assistance disclosure: [`docs/AI_USAGE.md`](./docs/AI_USAGE.md).
 
 ## License
 

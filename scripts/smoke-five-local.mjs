@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Phase 2 smoke (no Railway required):
+ * Local fixed-circuit smoke (no Railway required):
  *  - spawn 5 local hops on :4001–:4005 with the real keypairs
  *  - write a temp circuit-registry with those URLs
  *  - buildFixedCircuit(hop1→hop2→hop3) + eth_blockNumber through the mesh
@@ -139,6 +139,6 @@ if (!result?.result || !/^0x[0-9a-fA-F]+$/.test(result.result)) {
   process.exit(1);
 }
 
-console.log("✓ Phase 2 fixed-circuit smoke passed (5 local hops, hop1→hop2→hop3)");
+console.log("✓ Fixed-circuit smoke passed (5 local hops, hop1→hop2→hop3)");
 shutdown();
 process.exit(0);

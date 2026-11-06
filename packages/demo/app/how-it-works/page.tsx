@@ -84,22 +84,22 @@ Response bubbles back up the same chain unchanged.`}</pre>
           <p style={styles.body}>
             Anon-RPC leaves the anonymizing network&apos;s topology unspecified.
             Relay Mesh is built to be that network: a concrete multi-hop path
-            that plugs into Anon-RPC&apos;s worker interface. See Claims &amp;
-            Sources in the{" "}
+            that plugs into Anon-RPC&apos;s worker interface. Live pin details
+            and Claims &amp; Sources are in the project{" "}
             <a
-              href="https://github.com/KartikDehru/Relay-mesh"
+              href="https://github.com/KartikDehru/Relay-mesh#why-this-network"
               style={styles.a}
             >
               README
-            </a>{" "}
-            and the{" "}
+            </a>
+            ; try the{" "}
             <a
               href="https://ethereum.github.io/anon-rpc/demo/"
               style={styles.a}
             >
               anon-rpc live demo
-            </a>
-            .
+            </a>{" "}
+            with the published worker hash.
           </p>
         </section>
 
