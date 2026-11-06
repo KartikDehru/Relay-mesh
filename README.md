@@ -2,7 +2,7 @@
 
 **Live demo:** https://relay-mesh-zeta.vercel.app
 
-**Judge quickstart:** [live demo](https://relay-mesh-zeta.vercel.app) · [hop1 /health](https://hop1-production-70b7.up.railway.app/health) · [Sepolia specifier](https://sepolia.etherscan.io/address/0x005d62b2fB2BbfB05d268990DA6c328F80de28D1)
+**Judge quickstart:** [live demo](https://relay-mesh-zeta.vercel.app) · [hop1 /health](https://hop1-production-70b7.up.railway.app/health) · [Sepolia specifier](https://sepolia.etherscan.io/address/0x005d62b2fB2BbfB05d268990DA6c328F80de28D1) · [Use it with Anon-RPC](#use-it-with-anon-rpc)
 
 Relay Mesh is a **3-hop onion-routed relay network** for private JSON-RPC calls. No single relay ever sees both the client's network identity **and** the plaintext query.
 
@@ -26,6 +26,104 @@ Relay Mesh is a **3-hop onion-routed relay network** for private JSON-RPC calls.
 Health check any hop: `GET /health` → `{ role, fingerprint, publicKey, version, commit }`.
 
 Fixed MVP circuit: **hop1 → hop2 → hop3**. Hop 4 is a live spare; hop 5 is reserved.
+
+## Use it with Anon-RPC
+
+Relay Mesh is published as an Anon-RPC worker, so any wallet or app that supports the Anon-RPC standard can route its JSON-RPC reads through the 3-hop mesh by pointing at our specifier contract — no Relay Mesh-specific code.
+
+### Where it fits
+
+- **Wallets:** balance and token lookups without the RPC provider linking your IP to your addresses.
+- **dApps:** read calls (`eth_call`, `eth_getBalance`, logs) from the browser.
+- **Bots and AI agents:** queries that would otherwise reveal a strategy.
+- **Any Anon-RPC harness**, including the [official demo page](https://ethereum.github.io/anon-rpc/demo/) (steps below).
+
+### Try it in the official Anon-RPC demo
+
+Open [https://ethereum.github.io/anon-rpc/demo/](https://ethereum.github.io/anon-rpc/demo/):
+
+1. **Worker** → `Custom — paste a specifier`.
+2. **Bootstrap RPC URL** → `https://ethereum-sepolia-rpc.publicnode.com`.
+3. **Worker RPC URL** → click **use same**.
+4. **Specifier contract** → `0x005d62b2fB2BbfB05d268990DA6c328F80de28D1`.
+5. **Worker config** → leave blank (defaults to hop1 → hop2 → hop3).
+6. **Address** → any Sepolia address (e.g. `0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045`).
+7. Click **Start watching**.
+
+Confirmed: balance loads through the sandboxed worker (`eth_getBalance OK`).
+
+### Integrate in a wallet or dApp
+
+Install `@anon-rpc/browser-harness` and point it at our Sepolia specifier (same shape as the [Anon-RPC wallet Quick start](https://ethereum.github.io/anon-rpc/wallets/)):
+
+```ts
+import { AnonRpcWorker } from "@anon-rpc/browser-harness";
+
+const SEPOLIA_RPC = "https://ethereum-sepolia-rpc.publicnode.com";
+const RELAY_MESH_SPECIFIER = "0x005d62b2fB2BbfB05d268990DA6c328F80de28D1";
+
+/** Minimal EIP-1193 wrapper over fetch for the one-time specifier bootstrap read. */
+const sepoliaBootstrap = {
+  request: async ({ method, params }: { method: string; params?: unknown }) => {
+    const res = await fetch(SEPOLIA_RPC, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: params ?? [] }),
+    });
+    const body = (await res.json()) as { result?: unknown; error?: { message?: string } };
+    if (body.error) throw new Error(body.error.message ?? "RPC error");
+    return body.result;
+  },
+};
+
+const worker = new AnonRpcWorker({
+  // Specifier contract on Sepolia (reference adopters use mainnet).
+  address: RELAY_MESH_SPECIFIER,
+  // Optional — see Worker config below. Leave undefined for hop1 → hop2 → hop3.
+  config: undefined,
+  preExisting: {
+    rpcProvider: sepoliaBootstrap,
+  },
+});
+
+const res = await worker.fetch(SEPOLIA_RPC, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "eth_getBalance",
+    params: ["0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", "latest"],
+  }),
+  // Optional: our worker picks a stable 3-hop circuit per key from the hop pool.
+  anonOptions: { isolationKey: "account-1" },
+});
+const { result } = await res.json();
+
+// worker.fetch can be passed to anything that accepts a custom fetch.
+worker.close();
+```
+
+### Worker config
+
+Optional plain JSON delivered as `WorkerInit.config` (see [`packages/anon-rpc-worker/README.md`](./packages/anon-rpc-worker/README.md)):
+
+```json
+{
+  "hops": [{ "id": "hop1", "url": "https://…", "publicKey": "…" }, …],
+  "pool": [{ "id": "hop4", "url": "https://…", "publicKey": "…" }, …],
+  "honorIsolationKey": true
+}
+```
+
+Defaults bake in the live hop1→hop2→hop3 Railway circuit. When `anonOptions.isolationKey` is set and `honorIsolationKey` is true, the worker deterministically picks 3 hops from `pool`.
+
+### Good to know
+
+- The specifier is on Sepolia; the bootstrap provider must be able to read Sepolia (Anon-RPC's reference examples use mainnet).
+- The live exits only call allowlisted targets — currently `https://ethereum-sepolia-rpc.publicnode.com`. Requests to any other RPC URL are rejected. Mainnet support means adding a mainnet target to `EXIT_RPC_ALLOWLIST`.
+- Per the Anon-RPC wallet guide, the one-time bootstrap read of the specifier is not anonymized, and the worker sees every request routed through it, including signed transactions.
+- Our worker reaches the entry hop over HTTPS (ambient `fetch`), not Anon-RPC's KPS transport; moving to KPS is future work.
 
 ## Verify it yourself
 
@@ -191,6 +289,7 @@ pnpm dev:demo                  # http://localhost:3000
 4. **Global passive adversary** watching every hop can still attempt timing correlation.
 5. **Exit RPC target** sees the query and response (by design); privacy is against linking that view to the original client IP via a single hop.
 6. **Hop 5** is reserved and not deployed yet.
+7. **Entry hop over HTTPS, not KPS** — the Anon-RPC worker reaches hop1 with ambient `fetch` over HTTPS. Moving the client→entry leg onto Anon-RPC's KPS transport is future work.
 
 ## Hackathon
 
