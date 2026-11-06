@@ -23,6 +23,7 @@ import {
   shortUrl,
 } from "@/lib/mesh";
 import { SiteNav } from "@/components/SiteNav";
+import { UseWithAnonRpc } from "@/components/UseWithAnonRpc";
 
 type Mode = "fixed" | "random";
 
@@ -257,6 +258,8 @@ export function DemoApp() {
           directNote={directNote}
         />
       )}
+
+      <UseWithAnonRpc />
 
       {registry && <VerifySection registry={registry} />}
 

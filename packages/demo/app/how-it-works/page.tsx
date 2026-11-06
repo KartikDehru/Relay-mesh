@@ -99,7 +99,12 @@ Response bubbles back up the same chain unchanged.`}</pre>
             >
               anon-rpc live demo
             </a>{" "}
-            with the published worker hash.
+            with the published worker hash. For wallet and dApp wiring — demo
+            steps, a browser-harness snippet, and caveats — see{" "}
+            <Link href="/#use-with-anon-rpc" style={styles.a}>
+              Use it with Anon-RPC
+            </Link>{" "}
+            on the homepage.
           </p>
         </section>
 

@@ -31,6 +31,9 @@ export function SiteNav() {
         >
           How it works
         </Link>
+        <a href="/#use-with-anon-rpc" style={styles.link}>
+          Use with Anon-RPC
+        </a>
         <a
           href={DOCS_URL}
           target="_blank"
@@ -77,15 +80,19 @@ const styles: Record<string, React.CSSProperties> = {
   links: {
     display: "flex",
     alignItems: "center",
-    gap: 6,
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: 4,
+    minWidth: 0,
   },
   link: {
     textDecoration: "none",
     color: "var(--muted)",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 500,
-    padding: "8px 12px",
+    padding: "6px 10px",
     borderRadius: 999,
+    whiteSpace: "nowrap",
   },
   linkActive: {
     color: "var(--ink)",

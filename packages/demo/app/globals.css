@@ -159,4 +159,8 @@ select {
     height: 18px !important;
     margin: 0 auto 6px !important;
   }
+
+  .use-anon-cards {
+    grid-template-columns: 1fr !important;
+  }
 }
