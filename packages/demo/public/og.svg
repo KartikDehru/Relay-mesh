@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f7f9fc"/>
+      <stop offset="100%" stop-color="#e8eef8"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6b5cff"/>
+      <stop offset="100%" stop-color="#1f7dff"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="180" cy="120" r="160" fill="#6b5cff" opacity="0.12"/>
+  <circle cx="1040" cy="520" r="200" fill="#1f7dff" opacity="0.12"/>
+  <polygon points="160,315 220,200 340,200 400,315 340,430 220,430" fill="url(#mark)"/>
+  <text x="460" y="290" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="700" fill="#12141a">Relay Mesh</text>
+  <text x="460" y="360" font-family="Arial, Helvetica, sans-serif" font-size="28" fill="#5c6575">3-hop onion path for private JSON-RPC</text>
+  <text x="460" y="420" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#6b5cff">ETHGlobal · Anon-RPC</text>
+</svg>

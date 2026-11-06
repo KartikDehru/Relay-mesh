@@ -345,6 +345,7 @@ async function handleExit(
       payloadSha256Prefix: payloadSha256Prefix(rawPayload),
       layerType: "exit",
       sawPlaintextQuery: true,
+      ms: Date.now() - started,
     });
     if (sealedObs) wire.observations = [sealedObs];
   }
@@ -432,6 +433,7 @@ async function handleForward(
         payloadSha256Prefix: payloadSha256Prefix(rawPayload),
         layerType: "forward",
         sawPlaintextQuery: false,
+        ms: Date.now() - started,
       });
       if (sealedObs && typeof wire.payload === "string") {
         const observations = [...(wire.observations ?? []), sealedObs];

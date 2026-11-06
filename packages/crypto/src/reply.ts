@@ -72,7 +72,9 @@ export type HopObservation = {
   payloadSha256Prefix: string;
   layerType: "forward" | "exit";
   sawPlaintextQuery: boolean;
-};
+  /** Wall time spent in this hop (ms), including upstream wait when measured. */
+  ms?: number;
+}
 
 export function sealObservation(
   demoKeyB64: string,

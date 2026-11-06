@@ -21,11 +21,30 @@ const plex = IBM_Plex_Mono({
   display: "swap",
 });
 
+const siteUrl = "https://relay-mesh-zeta.vercel.app";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Relay Mesh — private JSON-RPC",
   description:
-    "3-hop onion-routed relay mesh. No single hop sees both your IP and your query.",
+    "3-hop onion-routed relay for private JSON-RPC. No single hop sees both your IP and your query. Built for ETHGlobal Mumbai — Anon-RPC track.",
   icons: { icon: "/favicon.svg" },
+  openGraph: {
+    title: "Relay Mesh — private JSON-RPC",
+    description:
+      "3-hop onion-routed relay for private JSON-RPC. Verify hops, sealed observations, and the Sepolia worker pin.",
+    url: siteUrl,
+    siteName: "Relay Mesh",
+    images: [{ url: "/og.svg", width: 1200, height: 630, alt: "Relay Mesh" }],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Relay Mesh — private JSON-RPC",
+    description:
+      "3-hop onion-routed relay for private JSON-RPC. No single hop sees both your IP and your query.",
+    images: ["/og.svg"],
+  },
 };
 
 export default function RootLayout({

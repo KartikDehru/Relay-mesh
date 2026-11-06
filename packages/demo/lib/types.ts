@@ -18,6 +18,8 @@ export type CircuitRegistry = {
   notes?: string;
 };
 
+export type RpcMethod = "eth_blockNumber" | "eth_chainId" | "eth_getBalance";
+
 export type RpcPayload = {
   jsonrpc: "2.0";
   id: number;
@@ -32,6 +34,17 @@ export type DemoObservation = {
   payloadSha256Prefix: string;
   layerType: "forward" | "exit";
   sawPlaintextQuery: boolean;
+  ms?: number;
+};
+
+export type HopHealthStatus = {
+  id: string;
+  role: string;
+  fingerprint: string;
+  url: string;
+  ok: boolean;
+  latencyMs: number | null;
+  error?: string;
 };
 
 export type CaptureResult = {
@@ -46,4 +59,6 @@ export type CaptureResult = {
   directMs: number;
   mode: "fixed" | "random";
   observations: DemoObservation[];
+  /** True when hops returned pre-hardening plaintext (need redeploy). */
+  legacyHops?: boolean;
 };

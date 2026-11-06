@@ -6,7 +6,17 @@ import {
   type HopObservation,
   type RelayHop,
 } from "@relay-mesh/crypto";
-import type { CircuitRegistry, RegistryNode, RpcPayload } from "./types";
+import type {
+  CircuitRegistry,
+  HopHealthStatus,
+  RegistryNode,
+  RpcMethod,
+  RpcPayload,
+} from "./types";
+
+/** Fixed public sample address for eth_getBalance demos. */
+export const SAMPLE_BALANCE_ADDRESS =
+  "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 
 export async function loadRegistry(): Promise<CircuitRegistry> {
   const res = await fetch("/circuit-registry.json", { cache: "no-store" });
@@ -66,6 +76,56 @@ export function pickRandomCircuit(registry: CircuitRegistry): {
   };
 }
 
+export async function probeHopHealth(
+  registry: CircuitRegistry,
+): Promise<HopHealthStatus[]> {
+  const nodes = deployedNodes(registry);
+  return Promise.all(
+    nodes.map(async (n) => {
+      const role = n.roleHint ?? "hop";
+      const base = n.url.replace(/\/$/, "");
+      const t0 = performance.now();
+      try {
+        const res = await fetch(`${base}/health`, { cache: "no-store" });
+        const latencyMs = Math.round(performance.now() - t0);
+        if (!res.ok) {
+          return {
+            id: n.id,
+            role,
+            fingerprint: n.fingerprint,
+            url: base,
+            ok: false,
+            latencyMs,
+            error: `HTTP ${res.status}`,
+          };
+        }
+        const body = (await res.json()) as {
+          fingerprint?: string;
+          role?: string;
+        };
+        return {
+          id: n.id,
+          role: body.role ?? role,
+          fingerprint: body.fingerprint ?? n.fingerprint,
+          url: base,
+          ok: true,
+          latencyMs,
+        };
+      } catch (e) {
+        return {
+          id: n.id,
+          role,
+          fingerprint: n.fingerprint,
+          url: base,
+          ok: false,
+          latencyMs: null,
+          error: e instanceof Error ? e.message : String(e),
+        };
+      }
+    }),
+  );
+}
+
 /** Prefer entry hop /whoami (demo mode); never call third-party IP APIs. */
 export async function fetchClientIp(entryHopUrl?: string): Promise<string> {
   if (entryHopUrl) {
@@ -82,13 +142,19 @@ export async function fetchClientIp(entryHopUrl?: string): Promise<string> {
   return "unknown";
 }
 
-export function defaultRpcPayload(): RpcPayload {
-  return {
-    jsonrpc: "2.0",
-    id: 1,
-    method: "eth_blockNumber",
-    params: [],
-  };
+export function buildRpcPayload(method: RpcMethod): RpcPayload {
+  if (method === "eth_getBalance") {
+    return {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_getBalance",
+      params: [SAMPLE_BALANCE_ADDRESS, "latest"],
+    };
+  }
+  if (method === "eth_chainId") {
+    return { jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] };
+  }
+  return { jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] };
 }
 
 export async function sendDirect(
@@ -122,6 +188,7 @@ export async function sendViaMeshBrowser(
   ms: number;
   onion: string;
   observations: HopObservation[];
+  legacyHops: boolean;
 }> {
   const demoKey = generateDemoKey();
   const { onion, replyKey } = buildOnion(rpcPayload, hops, rpcTargetUrl, {
@@ -140,15 +207,34 @@ export async function sendViaMeshBrowser(
   const text = await res.text();
   const ms = Math.round(performance.now() - t0);
   if (!res.ok) throw new Error(`Mesh HTTP ${res.status}: ${text.slice(0, 240)}`);
-  let wire: { payload?: string; observations?: string[] };
+
+  let wire: {
+    payload?: string;
+    observations?: string[];
+    jsonrpc?: string;
+    result?: unknown;
+  };
   try {
-    wire = JSON.parse(text) as { payload?: string; observations?: string[] };
+    wire = JSON.parse(text) as typeof wire;
   } catch {
     throw new Error("Mesh returned non-JSON body");
   }
+
+  // Pre-hardening hops returned plaintext JSON-RPC on the wire.
+  if (typeof wire.payload !== "string" && wire.jsonrpc) {
+    return {
+      result: wire,
+      ms,
+      onion,
+      observations: [],
+      legacyHops: true,
+    };
+  }
+
   if (typeof wire.payload !== "string") {
     throw new Error("Mesh response missing sealed payload");
   }
+
   const envelope = openReply(replyKey, wire.payload);
   if (envelope.status < 200 || envelope.status >= 300) {
     throw new Error(
@@ -162,19 +248,30 @@ export async function sendViaMeshBrowser(
     /* keep text */
   }
 
+  // Exit seals first, then each forward hop appends → [exit, …, entry].
+  // Reverse so UI reads hop1 → hop3.
+  const sealedList = [...(wire.observations ?? [])].reverse();
   const observations: HopObservation[] = [];
-  for (const sealed of wire.observations ?? []) {
+  for (const sealed of sealedList) {
     try {
       observations.push(openObservation(demoKey, sealed));
     } catch {
-      /* hop may not have DEMO_LOGGING=true */
+      /* hop may not have DEMO_LOGGING yet */
     }
   }
 
-  return { result, ms, onion, observations };
+  return { result, ms, onion, observations, legacyHops: false };
 }
 
 export function cipherPreview(onionB64: string, max = 96): string {
   if (onionB64.length <= max) return onionB64;
   return `${onionB64.slice(0, max / 2)}…${onionB64.slice(-max / 2)}`;
+}
+
+export function shortUrl(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
 }
