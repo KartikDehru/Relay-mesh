@@ -127,6 +127,36 @@ describe("3-layer nested onion", () => {
     expect(() => openLayer(hop2.privateKey, layer2.innerBlob)).toThrow();
   });
 
+  it("builds N>=3 hop onions (4-hop peel)", () => {
+    const keys = [0, 1, 2, 3].map(() => generateKeypair());
+    const hops = keys.map((k, i) => ({
+      url: `http://127.0.0.1:500${i}`,
+      publicKey: k.publicKey,
+    }));
+    const rpcPayload = { jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] };
+    const { onion, replyKey } = buildOnion(rpcPayload, hops, "https://example.rpc");
+
+    let blob = onion;
+    for (let i = 0; i < hops.length - 1; i++) {
+      const layer = openLayer<{ nextHopUrl: string; innerBlob: string }>(
+        keys[i]!.privateKey,
+        blob,
+      );
+      expect(layer.nextHopUrl).toBe(hops[i + 1]!.url);
+      blob = layer.innerBlob;
+    }
+    const exit = stripJsonPadding(
+      openLayer<{
+        rpcTargetUrl: string;
+        rpcPayload: unknown;
+        replyKey: string;
+        _pad?: string;
+      }>(keys[3]!.privateKey, blob),
+    );
+    expect(exit.rpcPayload).toEqual(rpcPayload);
+    expect(exit.replyKey).toBe(replyKey);
+  });
+
   it("pads exit plaintext and replies to fixed buckets only", () => {
     const padded = padJsonObject({ a: 1, b: "x" });
     const len = new TextEncoder().encode(JSON.stringify(padded)).length;

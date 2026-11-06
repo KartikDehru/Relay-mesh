@@ -1,10 +1,11 @@
 import { buildOnion, openReply, type RelayHop } from "@relay-mesh/crypto";
 
 /**
- * Circuit: three relay hops [entry, middle, exit].
+ * Circuit of N >= 3 relay hops [entry, …, exit].
+ * Default production circuit is still hop1 → hop2 → hop3.
  * `rpcTargetUrl` is the final JSON-RPC endpoint (separate from hop URLs).
  */
-export type Circuit = [RelayHop, RelayHop, RelayHop];
+export type Circuit = RelayHop[];
 
 export type SendViaRelayMeshOptions = {
   /** Optional fetch implementation (defaults to global fetch). */
@@ -23,12 +24,12 @@ export async function sendViaRelayMesh(
   rpcTargetUrl: string,
   options: SendViaRelayMeshOptions = {},
 ): Promise<unknown> {
-  if (circuit.length !== 3) {
-    throw new Error("circuit must contain exactly 3 hops: [entry, middle, exit]");
+  if (circuit.length < 3) {
+    throw new Error("circuit must contain at least 3 hops");
   }
 
   const { onion, replyKey } = buildOnion(rpcPayload, circuit, rpcTargetUrl);
-  const entryUrl = circuit[0].url.replace(/\/$/, "") + "/relay";
+  const entryUrl = circuit[0]!.url.replace(/\/$/, "") + "/relay";
   const fetchFn = options.fetch ?? fetch;
 
   const controller =
@@ -61,7 +62,6 @@ export async function sendViaRelayMesh(
       throw new Error("Relay mesh response missing sealed payload");
     }
 
-    // Entry/middle observe only ciphertext; client opens with replyKey.
     const envelope = openReply(replyKey, wire.payload);
     if (envelope.status < 200 || envelope.status >= 300) {
       throw new Error(

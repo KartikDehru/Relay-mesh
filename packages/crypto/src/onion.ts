@@ -16,22 +16,26 @@ export type BuiltOnion = {
 };
 
 /**
- * Build a 3-layer nested onion for entry → middle → exit → RPC.
+ * Build an N-layer nested onion (N >= 3) for hops[0] → … → hops[N-1] → RPC.
  *
- * Innermost (exit):  { rpcTargetUrl, rpcPayload, replyKey }
- * Middle:            { nextHopUrl: exit.url, innerBlob }
- * Outer (entry):     { nextHopUrl: middle.url, innerBlob }
+ * Innermost (exit):  { rpcTargetUrl, rpcPayload, replyKey } (bucket-padded)
+ * Each prior hop:    { nextHopUrl: next.url, innerBlob }
+ *
+ * Default production circuit remains 3 hops (entry → middle → exit).
  */
 export function buildOnion(
   rpcPayload: unknown,
-  hops: [RelayHop, RelayHop, RelayHop],
+  hops: readonly RelayHop[],
   rpcTargetUrl: string,
 ): BuiltOnion {
-  const [entry, middle, exit] = hops;
-  const replyKey = generateReplyKey();
+  if (hops.length < 3) {
+    throw new Error("circuit must contain at least 3 hops");
+  }
 
-  // Bucket-pad exit plaintext so ciphertext size does not leak method/params size.
-  const exitLayer = sealLayer(
+  const replyKey = generateReplyKey();
+  const exit = hops[hops.length - 1]!;
+
+  let blob = sealLayer(
     exit.publicKey,
     padJsonObject({
       rpcTargetUrl,
@@ -40,15 +44,14 @@ export function buildOnion(
     }),
   );
 
-  const middleLayer = sealLayer(middle.publicKey, {
-    nextHopUrl: exit.url,
-    innerBlob: exitLayer,
-  });
+  for (let i = hops.length - 2; i >= 0; i--) {
+    const hop = hops[i]!;
+    const next = hops[i + 1]!;
+    blob = sealLayer(hop.publicKey, {
+      nextHopUrl: next.url.replace(/\/$/, ""),
+      innerBlob: blob,
+    });
+  }
 
-  const entryLayer = sealLayer(entry.publicKey, {
-    nextHopUrl: middle.url,
-    innerBlob: middleLayer,
-  });
-
-  return { onion: entryLayer, replyKey };
+  return { onion: blob, replyKey };
 }

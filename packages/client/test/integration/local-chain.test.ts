@@ -191,3 +191,62 @@ describe("local 3-hop chain", () => {
     expect(wire.payload!.length).toBeGreaterThan(32);
   });
 });
+
+describe("local 4-hop chain", () => {
+  const hops: Hop[] = [
+    { port: 4011, role: "entry", keypair: generateKeypair() },
+    { port: 4012, role: "middle", keypair: generateKeypair() },
+    { port: 4013, role: "middle", keypair: generateKeypair() },
+    { port: 4014, role: "exit", keypair: generateKeypair() },
+  ];
+
+  beforeAll(async () => {
+    const allowed = hops.map((h) => `http://127.0.0.1:${h.port}`).join(",");
+    const exitAllow = JSON.stringify({ "11155111": EXIT_RPC_URL });
+    const common = {
+      ALLOWED_HOP_URLS: allowed,
+      EXIT_RPC_ALLOWLIST: exitAllow,
+    };
+    hops[0]!.proc = startHop(hops[0]!, {
+      ...common,
+      NEXT_HOP_URL: `http://127.0.0.1:${hops[1]!.port}`,
+    });
+    hops[1]!.proc = startHop(hops[1]!, {
+      ...common,
+      NEXT_HOP_URL: `http://127.0.0.1:${hops[2]!.port}`,
+    });
+    hops[2]!.proc = startHop(hops[2]!, {
+      ...common,
+      NEXT_HOP_URL: `http://127.0.0.1:${hops[3]!.port}`,
+    });
+    hops[3]!.proc = startHop(hops[3]!, common);
+
+    await Promise.all(hops.map((h) => waitForHealth(h.port)));
+  }, 45_000);
+
+  afterAll(async () => {
+    for (const h of hops) {
+      if (!h.proc || h.proc.killed) continue;
+      h.proc.kill("SIGTERM");
+    }
+    await new Promise((r) => setTimeout(r, 300));
+  });
+
+  it("returns eth_blockNumber through 4 hops", async () => {
+    const circuit = hops.map((h) => ({
+      url: `http://127.0.0.1:${h.port}`,
+      publicKey: h.keypair.publicKey,
+    }));
+
+    const result = (await sendViaRelayMesh(
+      { jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] },
+      circuit,
+      EXIT_RPC_URL,
+      { timeoutMs: 30_000 },
+    )) as { result?: string; error?: unknown };
+
+    expect(result.error).toBeUndefined();
+    expect(result.result).toMatch(/^0x[0-9a-fA-F]+$/);
+    console.log(`eth_blockNumber via 4-hop mesh => ${result.result}`);
+  });
+});
